@@ -17,6 +17,7 @@ DerivedData/
 
 # SwiftPM (command-line builds / local package artifacts)
 .build/
+.swiftpm/
 
 # Build
 build/
@@ -50,3 +51,22 @@ vendor/bundle/
 
 # Node (helper script)
 node_modules/
+
+# Editor / IDE
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+*~
+
+# Merge / patch leftovers
+*.orig
+*.rej
+
+# Logs
+*.log
+
+# Local secrets
+.env
+.env.local
