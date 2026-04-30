@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var streamManager = StreamManager()
+    @StateObject private var weather = WeatherViewModel()
 
     var body: some View {
         Group {
@@ -14,8 +15,18 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
             } else if let streamURL = streamManager.streamURL {
-                VideoStreamView(url: streamURL)
-                    .edgesIgnoringSafeArea(.all)
+                ZStack(alignment: .top) {
+                    VideoStreamView(url: streamURL)
+                        .ignoresSafeArea()
+                    WeatherOverlayView(viewModel: weather)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 8)
+                        .allowsHitTesting(false)
+                }
+                .ignoresSafeArea()
+                .onAppear { weather.start() }
+                .onDisappear { weather.stop() }
             } else {
                 VStack {
                     Text("Failed to load stream")

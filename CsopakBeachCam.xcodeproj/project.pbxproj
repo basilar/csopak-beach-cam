@@ -78,6 +78,11 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
+		1B00000000000000000000AA /* SharedWeather */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SharedWeather;
+			sourceTree = "<group>";
+		};
 		1B00000000000000000000A2 /* CsopakBeachCam */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = CsopakBeachCam;
@@ -193,6 +198,7 @@
 			isa = PBXGroup;
 			children = (
 				1B00000000000000000000A1 /* Shared */,
+				1B00000000000000000000AA /* SharedWeather */,
 				1B00000000000000000000A2 /* CsopakBeachCam */,
 				1B00000000000000000000A3 /* CsopakBeachCamTV */,
 				1B00000000000000000000A4 /* CsopakBeachCamTests */,
@@ -260,6 +266,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				1B00000000000000000000A1 /* Shared */,
+				1B00000000000000000000AA /* SharedWeather */,
 				1B00000000000000000000A3 /* CsopakBeachCamTV */,
 			);
 			name = CsopakBeachCamTV;
@@ -398,6 +405,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				1B00000000000000000000A1 /* Shared */,
+				1B00000000000000000000AA /* SharedWeather */,
 				1B00000000000000000000A9 /* CsopakBeachCamMac */,
 			);
 			name = CsopakBeachCamMac;

@@ -30,6 +30,9 @@ struct WeatherOverlayView: View {
                         StationObsBlock(series: seriesFor(name: name), isLoading: viewModel.isLoading)
                     }
                 }
+                #if os(tvOS)
+                Spacer(minLength: 24)
+                #endif
                 ForEach(WeatherConstants.targetNames, id: \.self) { name in
                     ForecastBlock(name: name,
                                   fc: viewModel.snapshot.forecasts[name],
@@ -57,6 +60,7 @@ struct WeatherOverlayView: View {
                 .font(monoFont(weight: .regular))
                 .foregroundColor(.white.opacity(0.55))
             Spacer()
+            #if os(macOS)
             Button {
                 Task { await viewModel.refresh() }
             } label: {
@@ -71,6 +75,7 @@ struct WeatherOverlayView: View {
             }
             .buttonStyle(.plain)
             .foregroundColor(.white.opacity(0.85))
+            #endif
         }
     }
 
