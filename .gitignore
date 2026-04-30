@@ -1,0 +1,52 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode — user-specific / local
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SwiftPM (command-line builds / local package artifacts)
+.build/
+
+# Build
+build/
+Build/
+
+# Accio dependency manager (uncommon)
+Dependencies/
+.accio/
+
+# Code coverage
+*.gcno
+*.gcda
+*.profdata
+
+# Instruments
+*.trace
+
+# App packaging / export
+*.app.dSYM
+*.xcarchive
+
+# fastlane (if used later)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Ruby (CocoaPods / fastlane)
+vendor/bundle/
+.bundle/
+
+# Node (helper script)
+node_modules/

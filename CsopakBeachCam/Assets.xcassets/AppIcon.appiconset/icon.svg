@@ -1,0 +1,23 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+    <g>
+        <!-- Sky -->
+        <rect x="0" y="0" width="1024" height="512" fill="#A9D4E2" />
+
+        <!-- Sun -->
+        <circle cx="800" cy="200" r="60" fill="#FFD700" />
+
+        <!-- Distant Hills -->
+        <path d="M -10 512 Q 256 480, 512 512 T 1034 512 L 1024 1024 L 0 1024 Z" fill="#8FBC8F" />
+
+        <!-- Water -->
+        <rect x="0" y="512" width="1024" height="512" fill="#4682B4" />
+
+        <!-- Windsurfer -->
+        <!-- Sail -->
+        <path d="M 500 350 C 550 450, 550 550, 500 650 L 480 650 C 530 550, 530 450, 480 350 Z" fill="#FFFFFF" />
+        <!-- Mast -->
+        <line x1="500" y1="350" x2="500" y2="670" stroke="#2F4F4F" stroke-width="10" />
+        <!-- Board -->
+        <path d="M 450 670 Q 500 690, 550 670 L 530 660 Q 500 680, 470 660 Z" fill="#E0E0E0" />
+    </g>
+</svg>
