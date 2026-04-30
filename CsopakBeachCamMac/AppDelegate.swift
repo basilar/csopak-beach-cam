@@ -86,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let container = NSView(frame: NSRect(origin: .zero, size: Self.popoverSize))
 
         let host = NSHostingView(
-            rootView: ContentView(streamManager: streamManager)
+            rootView: ContentView(streamManager: streamManager, showWeather: false)
                 .frame(width: Self.popoverSize.width, height: Self.popoverSize.height)
         )
         host.frame = container.bounds

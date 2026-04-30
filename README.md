@@ -8,13 +8,19 @@ SwiftUI clients for a live beach camera in Csopak, Hungary, powered by [IPCamLiv
 |--------|----------|
 | **iOS** (`CsopakBeachCam`) | Embeds the IPCamLive web player in a `WKWebView` with inline playback and pinch-to-zoom. The idle timer is disabled so the screen stays on while you watch. |
 | **tvOS** (`CsopakBeachCamTV`) | Resolves the HLS stream URL and plays it with `AVPlayer` / `VideoPlayer`. |
-| **macOS** (`CsopakBeachCamMac`) | Menu-bar-only app (no Dock icon). Click the menu bar icon to drop down a small live preview; click anywhere inside the preview to detach it as a resizable window; click the menu bar icon again to re-attach. Right-click the icon for **Quit**. The detached window's position and size are remembered between sessions. Display sleep is suppressed via `IOPMAssertion` while the stream is playing. Plays the HLS stream with `AVPlayer` / `VideoPlayer`. |
+| **macOS** (`CsopakBeachCamMac`) | Menu-bar-only app (no Dock icon). Click the menu bar icon to drop down a small live preview; click anywhere inside the preview to detach it as a resizable window; click the menu bar icon again to re-attach. Right-click the icon for **Quit**. The detached window's position and size are remembered between sessions. Display sleep is suppressed via `IOPMAssertion` while the stream is playing. The HLS stream is played with `AVPlayerView` (no transport controls or hover dimming). The detached window also overlays live wind data and a short-term forecast for the two nearest MET.hu stations (Balatonfüred, Balatonalmádi). |
 | **watchOS** (`CsopakBeachCamWatch`) | Fetches periodic JPEG snapshots (about every 5 seconds) for a lightweight wrist experience. |
 
 Shared logic lives under `Shared/`:
 
 - `CameraConfig` — camera alias / player URL.
 - `StreamManager` — loads the IPCamLive player HTML, derives the stream state API URL, reads JSON, and produces HLS (`stream.m3u8`) and snapshot (`snapshot.jpg`) URLs.
+
+The macOS-only weather overlay lives under `CsopakBeachCamMac/`:
+
+- `WeatherFetcher` / `WeatherViewModel` — pull the latest 10-minute observations (wind speed, gusts, direction, temperature) for each target station from the [MET.hu open data portal](https://odp.met.hu/) and an hourly wind forecast from [Open-Meteo](https://open-meteo.com/). Polls every ~90 s.
+- `MiniZip` — minimal in-process ZIP extractor (single-entry, store/deflate) used to read the MET.hu observation archives without a third-party dependency.
+- `WeatherOverlayView` / `WeatherStyling` — Beaufort-coloured, monospaced grid rendered on top of the video in the detached window.
 
 ## Requirements
 
