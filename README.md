@@ -2,6 +2,8 @@
 
 SwiftUI clients for a live beach camera in Csopak, Hungary, powered by [IPCamLive](https://ipcamlive.com/). The project ships four apps from one workspace: **iPhone/iPad**, **Apple TV**, **Mac**, and **Apple Watch**.
 
+![macOS detached window with live stream and weather overlay](macos-detached-window.png)
+
 ## Platforms
 
 | Target | Behavior |
