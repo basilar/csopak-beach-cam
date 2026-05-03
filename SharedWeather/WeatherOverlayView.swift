@@ -105,13 +105,12 @@ private struct StationObsBlock: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(series?.station.name ?? "—")
-                .font(monoFont())
-                .foregroundColor(.white)
-
             if let series, !series.rows.isEmpty {
                 content(series: series)
             } else {
+                Text(series?.station.name ?? "—")
+                    .font(monoFont())
+                    .foregroundColor(.white)
                 Text(isLoading ? "Loading…" : "No data")
                     .font(monoFont(weight: .regular))
                     .foregroundColor(.white.opacity(0.6))
@@ -127,7 +126,8 @@ private struct StationObsBlock: View {
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 1) {
-                        timeHeaderRow(slotKeys: slotKeys)
+                        hourHeaderRow(name: series.station.name, slotKeys: slotKeys)
+                        minuteHeaderRow(slotKeys: slotKeys)
                         kRow(label: "Wind (kn)", slotKeys: slotKeys) { sk in
                             let r = rowBySlot[sk].flatMap { series.rows[safe: $0] }
                             return msToKn(r?.fsMs)
@@ -152,13 +152,31 @@ private struct StationObsBlock: View {
     }
 
     @ViewBuilder
-    private func timeHeaderRow(slotKeys: [String]) -> some View {
+    private func hourHeaderRow(name: String, slotKeys: [String]) -> some View {
+        HStack(spacing: 0) {
+            Text(name)
+                .font(monoFont())
+                .foregroundColor(.white)
+                .frame(width: labelW, height: cellH, alignment: .leading)
+            ForEach(slotKeys.indices, id: \.self) { i in
+                let cur = hourComponent(slotKeys[i])
+                let prev = i > 0 ? hourComponent(slotKeys[i - 1]) : nil
+                Text(cur != prev ? cur : "")
+                    .font(monoFont(weight: .regular))
+                    .foregroundColor(.white.opacity(0.65))
+                    .frame(width: timeColW, height: cellH, alignment: .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func minuteHeaderRow(slotKeys: [String]) -> some View {
         HStack(spacing: 0) {
             Text(" ")
                 .font(monoFont())
                 .frame(width: labelW, height: cellH, alignment: .leading)
             ForEach(slotKeys, id: \.self) { sk in
-                Text(formatHM(sk))
+                Text(minuteComponent(sk))
                     .font(monoFont(weight: .regular))
                     .foregroundColor(.white.opacity(0.65))
                     .frame(width: timeColW, height: cellH)
@@ -402,11 +420,14 @@ private func calendarBudapest() -> Calendar {
     return cal
 }
 
-private func formatHM(_ slotKey: String) -> String {
-    guard slotKey.count >= 12 else { return slotKey }
-    let hh = slotKey.dropFirst(8).prefix(2)
-    let mm = slotKey.dropFirst(10).prefix(2)
-    return "\(hh):\(mm)"
+private func hourComponent(_ slotKey: String) -> String {
+    guard slotKey.count >= 12 else { return "" }
+    return String(slotKey.dropFirst(8).prefix(2))
+}
+
+private func minuteComponent(_ slotKey: String) -> String {
+    guard slotKey.count >= 12 else { return "" }
+    return String(slotKey.dropFirst(10).prefix(2))
 }
 
 private extension Array {
