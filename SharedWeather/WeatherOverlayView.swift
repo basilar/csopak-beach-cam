@@ -53,12 +53,16 @@ struct WeatherOverlayView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
+            #if !os(tvOS)
             if viewModel.isLoading {
                 ProgressView().controlSize(.small).colorScheme(.dark)
             }
+            #endif
             Text(statusText)
                 .font(monoFont(weight: .regular))
                 .foregroundColor(.white.opacity(0.55))
+                .lineLimit(1)
+                .truncationMode(.tail)
             Spacer()
             #if os(macOS)
             Button {
@@ -80,8 +84,8 @@ struct WeatherOverlayView: View {
     }
 
     private var statusText: String {
-        if !viewModel.snapshot.phase.isEmpty {
-            return viewModel.snapshot.phase
+        if !viewModel.phase.isEmpty {
+            return viewModel.phase
         }
         if viewModel.snapshot.lastUpdated == .distantPast {
             return viewModel.isLoading ? "loading…" : ""

@@ -62,5 +62,4 @@ struct WeatherSnapshot {
     var forecasts: [String: ForecastSeries] = [:]
     var lastUpdated: Date = .distantPast
     var error: String = ""
-    var phase: String = ""
 }

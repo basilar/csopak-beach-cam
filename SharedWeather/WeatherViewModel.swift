@@ -6,6 +6,7 @@ final class WeatherViewModel: ObservableObject {
     @Published var snapshot = WeatherSnapshot()
     @Published var visible: Bool = true
     @Published var isLoading: Bool = false
+    @Published var phase: String = ""
 
     private let fetcher = WeatherFetcher()
     private let credentials = WindguruCredentialsStore.shared
@@ -32,52 +33,69 @@ final class WeatherViewModel: ObservableObject {
 
     func refresh() async {
         isLoading = true
-        defer { isLoading = false }
-        var snap = WeatherSnapshot()
-        snap.phase = "loading meta…"
-        self.snapshot = snap
+        phase = snapshot.lastUpdated == .distantPast ? "loading meta…" : ""
+        defer {
+            isLoading = false
+            phase = ""
+        }
         NSLog("[Weather] refresh start")
+
+        let previous = snapshot
+        var next = WeatherSnapshot()
+        next.lastUpdated = previous.lastUpdated
+
         do {
             if stations.isEmpty {
                 stations = try await fetcher.loadStations()
                 NSLog("[Weather] meta loaded, stations=\(stations.count)")
             }
             if stations.isEmpty {
-                snap.error = "No stations resolved from MET.hu meta CSV"
-                self.snapshot = snap
+                var failed = previous
+                failed.error = "No stations resolved from MET.hu meta CSV"
+                self.snapshot = failed
                 return
             }
             let creds = credentials.currentCredentials()
             for station in stations {
-                snap.phase = "obs \(station.name)…"
-                self.snapshot = snap
+                phase = "obs \(station.name)…"
                 do {
                     let obs = try await fetcher.fetchObservations(for: station)
                     NSLog("[Weather] obs \(station.name) rows=\(obs.rows.count) hasTemp=\(obs.hasTemp)")
-                    snap.stations.append(obs)
+                    next.stations.append(obs)
                 } catch {
                     NSLog("[Weather] obs \(station.name) FAILED: \(error)")
-                    var empty = ObsSeries(station: station)
-                    empty.lastTime = nil
-                    snap.stations.append(empty)
-                    if snap.error.isEmpty {
-                        snap.error = "Obs \(station.name): \(error)"
+                    if let prev = previous.stations.first(where: { $0.station.name == station.name }),
+                       !prev.rows.isEmpty {
+                        next.stations.append(prev)
+                    } else {
+                        var empty = ObsSeries(station: station)
+                        empty.lastTime = nil
+                        next.stations.append(empty)
+                    }
+                    if next.error.isEmpty {
+                        next.error = "Obs \(station.name): \(error)"
                     }
                 }
                 if let spot = WeatherConstants.windguruSpots[station.name] {
-                    snap.phase = "forecast \(spot.label)…"
-                    self.snapshot = snap
+                    phase = "forecast \(spot.label)…"
                     let fc = await fetcher.fetchForecast(spot: spot, credentials: creds)
                     NSLog("[Weather] forecast \(spot.label) hours=\(fc.windKn.count) err=\(fc.error)")
-                    snap.forecasts[station.name] = fc
+                    if !fc.windKn.isEmpty {
+                        next.forecasts[station.name] = fc
+                    } else if let prev = previous.forecasts[station.name], !prev.windKn.isEmpty {
+                        next.forecasts[station.name] = prev
+                    } else {
+                        next.forecasts[station.name] = fc
+                    }
                 }
             }
-            snap.lastUpdated = Date()
-            snap.phase = ""
+            next.lastUpdated = Date()
+            self.snapshot = next
         } catch {
             NSLog("[Weather] refresh FAILED: \(error)")
-            snap.error = "\(error)"
+            var failed = previous
+            failed.error = "\(error)"
+            self.snapshot = failed
         }
-        self.snapshot = snap
     }
 }
