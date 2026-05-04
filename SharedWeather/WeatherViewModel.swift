@@ -8,6 +8,7 @@ final class WeatherViewModel: ObservableObject {
     @Published var isLoading: Bool = false
 
     private let fetcher = WeatherFetcher()
+    private let credentials = WindguruCredentialsStore.shared
     private var pollTask: Task<Void, Never>?
     private var stations: [WeatherStation] = []
 
@@ -46,6 +47,7 @@ final class WeatherViewModel: ObservableObject {
                 self.snapshot = snap
                 return
             }
+            let creds = credentials.currentCredentials()
             for station in stations {
                 snap.phase = "obs \(station.name)…"
                 self.snapshot = snap
@@ -62,11 +64,13 @@ final class WeatherViewModel: ObservableObject {
                         snap.error = "Obs \(station.name): \(error)"
                     }
                 }
-                snap.phase = "forecast \(station.name)…"
-                self.snapshot = snap
-                let fc = await fetcher.fetchForecast(lat: station.lat, lon: station.lon)
-                NSLog("[Weather] forecast \(station.name) hours=\(fc.windKn.count) err=\(fc.error)")
-                snap.forecasts[station.name] = fc
+                if let spot = WeatherConstants.windguruSpots[station.name] {
+                    snap.phase = "forecast \(spot.label)…"
+                    self.snapshot = snap
+                    let fc = await fetcher.fetchForecast(spot: spot, credentials: creds)
+                    NSLog("[Weather] forecast \(spot.label) hours=\(fc.windKn.count) err=\(fc.error)")
+                    snap.forecasts[station.name] = fc
+                }
             }
             snap.lastUpdated = Date()
             snap.phase = ""

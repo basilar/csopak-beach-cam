@@ -258,9 +258,14 @@ private struct ForecastBlock: View {
     let fc: ForecastSeries?
     let isLoading: Bool
 
+    private var headerLabel: String {
+        let spot = fc?.spotLabel.isEmpty == false ? fc!.spotLabel : name
+        return "\(spot) — AROME-HU"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text("\(name) — hourly")
+            Text(headerLabel)
                 .font(monoFont())
                 .foregroundColor(.white)
             if let fc, !fc.error.isEmpty {

@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var streamManager = StreamManager()
     @StateObject private var weather = WeatherViewModel()
+    @State private var showSettings = false
 
     var body: some View {
         Group {
@@ -25,8 +26,15 @@ struct ContentView: View {
                         .allowsHitTesting(false)
                 }
                 .ignoresSafeArea()
+                .focusable()
+                .onPlayPauseCommand { showSettings = true }
                 .onAppear { weather.start() }
                 .onDisappear { weather.stop() }
+                .sheet(isPresented: $showSettings) {
+                    WindguruSettingsView()
+                        .frame(maxWidth: 720)
+                        .padding(40)
+                }
             } else {
                 VStack {
                     Text("Failed to load stream")

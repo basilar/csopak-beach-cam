@@ -89,68 +89,140 @@ actor WeatherFetcher {
         return obs
     }
 
-    func fetchForecast(lat: Double, lon: Double, maxHours: Int = 48) async -> ForecastSeries {
-        var components = URLComponents(string: WeatherConstants.openMeteoForecast)!
-        components.queryItems = [
-            URLQueryItem(name: "latitude", value: String(lat)),
-            URLQueryItem(name: "longitude", value: String(lon)),
-            URLQueryItem(name: "hourly", value: "wind_speed_10m,wind_gusts_10m"),
-            URLQueryItem(name: "timezone", value: "Europe/Budapest"),
-            URLQueryItem(name: "wind_speed_unit", value: "kn"),
-            URLQueryItem(name: "forecast_days", value: "4"),
+    func fetchForecast(spot: WindguruSpot,
+                       credentials: (user: String, password: String)?,
+                       maxHours: Int = 48) async -> ForecastSeries {
+        var components = URLComponents(string: WeatherConstants.windguruMicro)!
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "s", value: String(spot.id)),
+            URLQueryItem(name: "m", value: WeatherConstants.windguruModel),
         ]
+        if let creds = credentials {
+            items.append(URLQueryItem(name: "u", value: creds.user))
+            items.append(URLQueryItem(name: "p", value: creds.password))
+        }
+        components.queryItems = items
         guard let url = components.url else {
-            return ForecastSeries(error: "bad url")
+            return ForecastSeries(spotLabel: spot.label, error: "bad url")
         }
         do {
-            let data = try await get(url)
-            guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let hourly = obj["hourly"] as? [String: Any],
-                  let times = hourly["time"] as? [String],
-                  let winds = hourly["wind_speed_10m"] as? [Any] else {
-                return ForecastSeries(error: "bad json")
+            let data = try await get(bustURL(url.absoluteString))
+            guard let body = String(data: data, encoding: .utf8) else {
+                return ForecastSeries(spotLabel: spot.label, error: "bad encoding")
             }
-            let gusts = (hourly["wind_gusts_10m"] as? [Any]) ?? []
-
-            let start = nextFullHourLocal()
-            let parser = ISO8601DateFormatter()
-            parser.formatOptions = [.withInternetDateTime]
-            let local = DateFormatter()
-            local.timeZone = WeatherConstants.timeZone
-            local.dateFormat = "yyyy-MM-dd'T'HH:mm"
-
-            var labels: [String] = []
-            var ws: [Double] = []
-            var gs: [Double] = []
-
-            for (i, t) in times.enumerated() {
-                guard i < winds.count else { break }
-                guard let dt = local.date(from: t) ?? parser.date(from: t) else { continue }
-                if dt < start { continue }
-                let w = (winds[i] as? Double) ?? Double((winds[i] as? Int) ?? 0)
-                let g: Double
-                if i < gusts.count, let gv = gusts[i] as? Double {
-                    g = gv
-                } else if i < gusts.count, let gv = gusts[i] as? Int {
-                    g = Double(gv)
-                } else {
-                    g = w
-                }
-                var cal = Calendar(identifier: .gregorian)
-                cal.timeZone = WeatherConstants.timeZone
-                let hr = cal.component(.hour, from: dt)
-                labels.append(String(format: "%02dh", hr))
-                ws.append(w)
-                gs.append(g)
-                if ws.count >= maxHours { break }
-            }
-            if ws.isEmpty {
-                return ForecastSeries(error: "no hourly steps")
-            }
-            return ForecastSeries(hourLabels: labels, windKn: ws, gustKn: gs)
+            return parseWindguruMicro(body, spot: spot, maxHours: maxHours)
         } catch {
-            return ForecastSeries(error: "\(error)")
+            return ForecastSeries(spotLabel: spot.label, error: "\(error)")
         }
+    }
+
+    private func parseWindguruMicro(_ body: String, spot: WindguruSpot, maxHours: Int) -> ForecastSeries {
+        let preStart = body.range(of: "<pre>")
+        let preEnd = body.range(of: "</pre>")
+        let pre: String
+        if let s = preStart, let e = preEnd, s.upperBound < e.lowerBound {
+            pre = String(body[s.upperBound..<e.lowerBound])
+        } else {
+            pre = body
+        }
+
+        var modelInfo = ""
+        if let r = pre.range(of: #"AROME-HU[^\n]*"#, options: .regularExpression) {
+            modelInfo = String(pre[r]).trimmingCharacters(in: .whitespaces)
+        }
+
+        if pre.contains("Wrong password") {
+            return ForecastSeries(modelInfo: modelInfo, spotLabel: spot.label,
+                                  error: "Windguru: wrong username or password")
+        }
+        if pre.contains("only available to Windguru PRO") {
+            return ForecastSeries(modelInfo: modelInfo, spotLabel: spot.label,
+                                  error: "AROME-HU on this spot needs Windguru PRO")
+        }
+
+        var labels: [String] = []
+        var ws: [Double] = []
+        var gs: [Double] = []
+
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = WeatherConstants.timeZone
+        let anchor = anchorComponents(modelInfo: modelInfo, calendar: cal)
+        var year = anchor.year
+        var month = anchor.month
+        var lastDay: Int? = nil
+        let now = Date()
+        let topOfHour = cal.date(from: cal.dateComponents([.year, .month, .day, .hour], from: now)) ?? now
+        let cutoff = cal.date(byAdding: .hour, value: -2, to: topOfHour) ?? topOfHour
+
+        for raw in pre.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline }) {
+            let line = String(raw)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+            let tokens = trimmed.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
+            guard tokens.count >= 5 else { continue }
+            // Forecast row shape: "<weekday> <day>. <HH>h <wspd> <gust> <wdirN> <wdeg> ..."
+            guard tokens[1].hasSuffix("."),
+                  tokens[2].hasSuffix("h"),
+                  let day = Int(tokens[1].dropLast()),
+                  let hour = Int(tokens[2].dropLast()),
+                  let wspd = Double(tokens[3]),
+                  let gust = parseKnots(tokens[4], fallback: wspd)
+            else { continue }
+
+            if let prev = lastDay, day < prev {
+                month += 1
+                if month > 12 { month = 1; year += 1 }
+            }
+            lastDay = day
+
+            var dc = DateComponents()
+            dc.year = year
+            dc.month = month
+            dc.day = day
+            dc.hour = hour
+            dc.timeZone = WeatherConstants.timeZone
+            guard let rowDate = cal.date(from: dc), rowDate >= cutoff else { continue }
+
+            labels.append(String(format: "%02dh", hour))
+            ws.append(wspd)
+            gs.append(gust)
+            if ws.count >= maxHours { break }
+        }
+
+        if ws.isEmpty {
+            return ForecastSeries(modelInfo: modelInfo, spotLabel: spot.label,
+                                  error: "no forecast rows")
+        }
+        return ForecastSeries(hourLabels: labels, windKn: ws, gustKn: gs,
+                              modelInfo: modelInfo, spotLabel: spot.label)
+    }
+
+    private func anchorComponents(modelInfo: String, calendar: Calendar) -> (year: Int, month: Int) {
+        if let r = modelInfo.range(of: #"init:\s*(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2})\s*UTC"#,
+                                   options: .regularExpression) {
+            let match = String(modelInfo[r])
+            let scanner = Scanner(string: match)
+            scanner.charactersToBeSkipped = CharacterSet(charactersIn: "init: -UTC\t")
+            if let y = scanner.scanInt(), let m = scanner.scanInt(), let d = scanner.scanInt(), let h = scanner.scanInt() {
+                var utcCal = Calendar(identifier: .gregorian)
+                utcCal.timeZone = TimeZone(secondsFromGMT: 0)!
+                var dc = DateComponents()
+                dc.year = y; dc.month = m; dc.day = d; dc.hour = h
+                if let initUTC = utcCal.date(from: dc) {
+                    let local = calendar.dateComponents([.year, .month], from: initUTC)
+                    if let ly = local.year, let lm = local.month {
+                        return (ly, lm)
+                    }
+                }
+            }
+        }
+        let now = calendar.dateComponents([.year, .month], from: Date())
+        return (now.year ?? 1970, now.month ?? 1)
+    }
+
+    private func parseKnots(_ token: String, fallback: Double) -> Double? {
+        if token == "-" { return fallback }
+        return Double(token)
     }
 
     // MARK: - helpers
@@ -204,15 +276,6 @@ actor WeatherFetcher {
             return Int(digits.prefix(8)) ?? 0
         }
         return 0
-    }
-
-    private func nextFullHourLocal() -> Date {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = WeatherConstants.timeZone
-        let now = Date()
-        let comps = cal.dateComponents([.year, .month, .day, .hour], from: now)
-        let floored = cal.date(from: comps) ?? now
-        return cal.date(byAdding: .hour, value: 1, to: floored) ?? floored
     }
 
     private func splitCSVLine(_ line: String, delimiter: Character) -> [String] {

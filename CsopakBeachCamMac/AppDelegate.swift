@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var detachedWindow: NSWindow?
+    private var settingsWindow: NSWindow?
     private var state: DisplayState = .hidden
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -147,6 +148,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let statusItem else { return }
 
         let menu = NSMenu()
+        menu.addItem(withTitle: "Windguru Credentials…",
+                     action: #selector(openSettings),
+                     keyEquivalent: ",").target = self
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Csopak Beach Cam",
                      action: #selector(quit),
                      keyEquivalent: "q").target = self
@@ -156,6 +161,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = nil
     }
 
+    @objc private func openSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        if let window = settingsWindow {
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 260),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Windguru Credentials"
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: WindguruSettingsView())
+        window.center()
+        window.delegate = self
+
+        settingsWindow = window
+        window.makeKeyAndOrderFront(nil)
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
     }
@@ -163,9 +191,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
-        guard (notification.object as AnyObject) === detachedWindow else { return }
-        detachedWindow = nil
-        state = .hidden
+        let closed = notification.object as AnyObject
+        if closed === detachedWindow {
+            detachedWindow = nil
+            state = .hidden
+        } else if closed === settingsWindow {
+            settingsWindow = nil
+        }
     }
 }
 
