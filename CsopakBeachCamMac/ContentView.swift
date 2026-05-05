@@ -23,8 +23,10 @@ struct ContentView: View {
                     .background(Color.black)
             } else if let streamURL = streamManager.streamURL {
                 ZStack(alignment: .top) {
-                    VideoStreamView(url: streamURL)
-                        .background(Color.black)
+                    VideoStreamView(url: streamURL) {
+                        Task { await streamManager.fetchStreamURL() }
+                    }
+                    .background(Color.black)
                     if showWeather {
                         if weather.visible {
                             WeatherOverlayView(viewModel: weather)
