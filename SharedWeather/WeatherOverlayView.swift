@@ -27,7 +27,9 @@ struct WeatherOverlayView: View {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(WeatherConstants.targetNames, id: \.self) { name in
-                        StationObsBlock(series: seriesFor(name: name), isLoading: viewModel.isLoading)
+                        StationObsBlock(series: seriesFor(name: name),
+                                        isLoading: viewModel.isLoading,
+                                        lastUpdated: viewModel.snapshot.lastUpdated)
                     }
                 }
                 #if os(tvOS)
@@ -36,7 +38,8 @@ struct WeatherOverlayView: View {
                 ForEach(WeatherConstants.targetNames, id: \.self) { name in
                     ForecastBlock(name: name,
                                   fc: viewModel.snapshot.forecasts[name],
-                                  isLoading: viewModel.isLoading)
+                                  isLoading: viewModel.isLoading,
+                                  lastUpdated: viewModel.snapshot.lastUpdated)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -106,6 +109,7 @@ struct WeatherOverlayView: View {
 private struct StationObsBlock: View {
     let series: ObsSeries?
     let isLoading: Bool
+    let lastUpdated: Date
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
@@ -125,43 +129,85 @@ private struct StationObsBlock: View {
 
     @ViewBuilder
     private func content(series: ObsSeries) -> some View {
-                let slotKeys = obsSlotKeys(rows: series.rows, count: 18)
-                let rowBySlot = obsRowBySlot(rows: series.rows)
+        let slotKeys = obsSlotKeys(rows: series.rows, count: 18)
+        let rowBySlot = obsRowBySlot(rows: series.rows)
 
+        HStack(alignment: .top, spacing: 0) {
+            labelColumn(name: series.station.name, hasTemp: series.hasTemp)
+            ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 1) {
-                        hourHeaderRow(name: series.station.name, slotKeys: slotKeys)
-                        minuteHeaderRow(slotKeys: slotKeys)
-                        kRow(label: "Wind (kn)", slotKeys: slotKeys) { sk in
+                        hourValuesRow(slotKeys: slotKeys)
+                        minuteValuesRow(slotKeys: slotKeys)
+                        kValuesRow(slotKeys: slotKeys) { sk in
                             let r = rowBySlot[sk].flatMap { series.rows[safe: $0] }
                             return msToKn(r?.fsMs)
                         }
-                        kRow(label: "Gust (kn)", slotKeys: slotKeys) { sk in
+                        kValuesRow(slotKeys: slotKeys) { sk in
                             let r = rowBySlot[sk].flatMap { series.rows[safe: $0] }
                             return msToKn(r?.fxMs)
                         }
-                        dirRow(label: "Dir mean", slotKeys: slotKeys) { sk in
+                        dirValuesRow(slotKeys: slotKeys) { sk in
                             rowBySlot[sk].flatMap { series.rows[safe: $0] }?.fsdDeg
                         }
-                        dirRow(label: "Dir gust", slotKeys: slotKeys) { sk in
+                        dirValuesRow(slotKeys: slotKeys) { sk in
                             rowBySlot[sk].flatMap { series.rows[safe: $0] }?.fxdDeg
                         }
                         if series.hasTemp {
-                            tempRow(label: "Temp (°C)", slotKeys: slotKeys) { sk in
+                            tempValuesRow(slotKeys: slotKeys) { sk in
                                 rowBySlot[sk].flatMap { series.rows[safe: $0] }?.taC
                             }
                         }
                     }
                 }
+                .onAppear { scrollToEnd(proxy: proxy, count: slotKeys.count) }
+                .onChange(of: slotKeys) { _, newKeys in
+                    scrollToEnd(proxy: proxy, count: newKeys.count)
+                }
+                .onChange(of: lastUpdated) { _, _ in
+                    scrollToEnd(proxy: proxy, count: slotKeys.count)
+                }
+            }
+        }
     }
 
     @ViewBuilder
-    private func hourHeaderRow(name: String, slotKeys: [String]) -> some View {
-        HStack(spacing: 0) {
+    private func labelColumn(name: String, hasTemp: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
             Text(name)
                 .font(monoFont())
                 .foregroundColor(.white)
                 .frame(width: labelW, height: cellH, alignment: .leading)
+            Color.clear
+                .frame(width: labelW, height: cellH)
+            Text("Wind (kn)")
+                .font(monoFont())
+                .foregroundColor(.white)
+                .frame(width: labelW, height: cellH, alignment: .leading)
+            Text("Gust (kn)")
+                .font(monoFont())
+                .foregroundColor(.white)
+                .frame(width: labelW, height: cellH, alignment: .leading)
+            Text("Dir mean")
+                .font(monoFont())
+                .foregroundColor(.white)
+                .frame(width: labelW, height: cellH, alignment: .leading)
+            Text("Dir gust")
+                .font(monoFont())
+                .foregroundColor(.white)
+                .frame(width: labelW, height: cellH, alignment: .leading)
+            if hasTemp {
+                Text("Temp (°C)")
+                    .font(monoFont())
+                    .foregroundColor(.white)
+                    .frame(width: labelW, height: cellH, alignment: .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func hourValuesRow(slotKeys: [String]) -> some View {
+        HStack(spacing: 0) {
             ForEach(slotKeys.indices, id: \.self) { i in
                 let cur = hourComponent(slotKeys[i])
                 let prev = i > 0 ? hourComponent(slotKeys[i - 1]) : nil
@@ -169,16 +215,14 @@ private struct StationObsBlock: View {
                     .font(monoFont(weight: .regular))
                     .foregroundColor(.white.opacity(0.65))
                     .frame(width: timeColW, height: cellH, alignment: .leading)
+                    .id("col-\(i)")
             }
         }
     }
 
     @ViewBuilder
-    private func minuteHeaderRow(slotKeys: [String]) -> some View {
+    private func minuteValuesRow(slotKeys: [String]) -> some View {
         HStack(spacing: 0) {
-            Text(" ")
-                .font(monoFont())
-                .frame(width: labelW, height: cellH, alignment: .leading)
             ForEach(slotKeys, id: \.self) { sk in
                 Text(minuteComponent(sk))
                     .font(monoFont(weight: .regular))
@@ -189,12 +233,8 @@ private struct StationObsBlock: View {
     }
 
     @ViewBuilder
-    private func kRow(label: String, slotKeys: [String], value: @escaping (String) -> Double?) -> some View {
+    private func kValuesRow(slotKeys: [String], value: @escaping (String) -> Double?) -> some View {
         HStack(spacing: 0) {
-            Text(label)
-                .font(monoFont())
-                .foregroundColor(.white)
-                .frame(width: labelW, height: cellH, alignment: .leading)
             ForEach(slotKeys, id: \.self) { sk in
                 if let kn = value(sk) {
                     let style = beaufortStyleKn(kn)
@@ -214,12 +254,8 @@ private struct StationObsBlock: View {
     }
 
     @ViewBuilder
-    private func dirRow(label: String, slotKeys: [String], value: @escaping (String) -> Double?) -> some View {
+    private func dirValuesRow(slotKeys: [String], value: @escaping (String) -> Double?) -> some View {
         HStack(spacing: 0) {
-            Text(label)
-                .font(monoFont())
-                .foregroundColor(.white)
-                .frame(width: labelW, height: cellH, alignment: .leading)
             ForEach(slotKeys, id: \.self) { sk in
                 let arrow = directionArrow(degFrom: value(sk))
                 Text(arrow)
@@ -232,12 +268,8 @@ private struct StationObsBlock: View {
     }
 
     @ViewBuilder
-    private func tempRow(label: String, slotKeys: [String], value: @escaping (String) -> Double?) -> some View {
+    private func tempValuesRow(slotKeys: [String], value: @escaping (String) -> Double?) -> some View {
         HStack(spacing: 0) {
-            Text(label)
-                .font(monoFont())
-                .foregroundColor(.white)
-                .frame(width: labelW, height: cellH, alignment: .leading)
             ForEach(slotKeys, id: \.self) { sk in
                 if let t = value(sk), t > -900 {
                     let style = tempStyleC(t)
@@ -255,12 +287,24 @@ private struct StationObsBlock: View {
             }
         }
     }
+
+    private func scrollToEnd(proxy: ScrollViewProxy, count: Int) {
+        guard count > 0 else { return }
+        let lastIdx = count - 1
+        DispatchQueue.main.async {
+            proxy.scrollTo("col-\(lastIdx)", anchor: .trailing)
+        }
+    }
 }
 
 private struct ForecastBlock: View {
     let name: String
     let fc: ForecastSeries?
     let isLoading: Bool
+    let lastUpdated: Date
+
+    private let barHeight: Int = 5
+    private let labelColumnWidth: CGFloat = 36
 
     private var headerLabel: String {
         let spot = fc?.spotLabel.isEmpty == false ? fc!.spotLabel : name
@@ -289,44 +333,71 @@ private struct ForecastBlock: View {
                 let gusts = Array(fc.gustKn.prefix(limit))
                 let vmax = max(winds.max() ?? 1, gusts.max() ?? 1, 1)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        BarRow(label: "Wind", values: winds, vmax: vmax)
-                        BarRow(label: "Gust", values: gusts, vmax: vmax)
-                        HStack(spacing: 0) {
-                            Text(" ")
-                                .font(monoFont())
-                                .frame(width: 36, height: cellH, alignment: .leading)
-                            ForEach(hours.indices, id: \.self) { idx in
-                                let s = hours[idx].filter { $0.isNumber }.suffix(2)
-                                Text(String(s))
-                                    .font(monoFont(weight: .regular))
-                                    .foregroundColor(.white.opacity(0.65))
-                                    .frame(width: timeColW, height: cellH)
+                HStack(alignment: .top, spacing: 0) {
+                    labelColumn
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                valueRow(values: winds, vmax: vmax)
+                                valueRow(values: gusts, vmax: vmax)
+                                hourRow(hours: hours)
                             }
+                        }
+                        .onAppear { scrollToStart(proxy: proxy, count: hours.count) }
+                        .onChange(of: hours) { _, newHours in
+                            scrollToStart(proxy: proxy, count: newHours.count)
+                        }
+                        .onChange(of: lastUpdated) { _, _ in
+                            scrollToStart(proxy: proxy, count: hours.count)
                         }
                     }
                 }
             }
         }
     }
-}
 
-private struct BarRow: View {
-    let label: String
-    let values: [Double]
-    let vmax: Double
-    private let height: Int = 5
-
-    var body: some View {
-        HStack(spacing: 0) {
-            Text(label)
+    private var labelColumn: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("Wind")
                 .font(monoFont())
                 .foregroundColor(.white)
-                .frame(width: 36, height: CGFloat(height) * cellH, alignment: .topLeading)
+                .frame(width: labelColumnWidth, height: CGFloat(barHeight) * cellH, alignment: .topLeading)
+            Text("Gust")
+                .font(monoFont())
+                .foregroundColor(.white)
+                .frame(width: labelColumnWidth, height: CGFloat(barHeight) * cellH, alignment: .topLeading)
+            Color.clear
+                .frame(width: labelColumnWidth, height: cellH)
+        }
+    }
+
+    @ViewBuilder
+    private func valueRow(values: [Double], vmax: Double) -> some View {
+        HStack(spacing: 0) {
             ForEach(values.indices, id: \.self) { i in
-                BarColumn(value: values[i], vmax: vmax, height: height)
+                BarColumn(value: values[i], vmax: vmax, height: barHeight)
+                    .id("col-\(i)")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func hourRow(hours: [String]) -> some View {
+        HStack(spacing: 0) {
+            ForEach(hours.indices, id: \.self) { idx in
+                let s = hours[idx].filter { $0.isNumber }.suffix(2)
+                Text(String(s))
+                    .font(monoFont(weight: .regular))
+                    .foregroundColor(.white.opacity(0.65))
+                    .frame(width: timeColW, height: cellH)
+            }
+        }
+    }
+
+    private func scrollToStart(proxy: ScrollViewProxy, count: Int) {
+        guard count > 0 else { return }
+        DispatchQueue.main.async {
+            proxy.scrollTo("col-0", anchor: .leading)
         }
     }
 }
