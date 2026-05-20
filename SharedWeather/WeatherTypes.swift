@@ -52,6 +52,7 @@ struct ForecastSeries {
     var hourLabels: [String] = []
     var windKn: [Double] = []
     var gustKn: [Double] = []
+    var dirDeg: [Double?] = []
     var modelInfo: String = ""
     var spotLabel: String = ""
     var error: String = ""

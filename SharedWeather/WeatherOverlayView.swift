@@ -331,6 +331,7 @@ private struct ForecastBlock: View {
                 let hours = Array(fc.hourLabels.prefix(limit))
                 let winds = Array(fc.windKn.prefix(limit))
                 let gusts = Array(fc.gustKn.prefix(limit))
+                let dirs = Array(fc.dirDeg.prefix(limit))
                 let vmax = max(winds.max() ?? 1, gusts.max() ?? 1, 1)
 
                 HStack(alignment: .top, spacing: 0) {
@@ -340,6 +341,7 @@ private struct ForecastBlock: View {
                             VStack(alignment: .leading, spacing: 1) {
                                 valueRow(values: winds, vmax: vmax)
                                 valueRow(values: gusts, vmax: vmax)
+                                dirRow(dirs: dirs, count: hours.count)
                                 hourRow(hours: hours)
                             }
                         }
@@ -366,6 +368,10 @@ private struct ForecastBlock: View {
                 .font(monoFont())
                 .foregroundColor(.white)
                 .frame(width: labelColumnWidth, height: CGFloat(barHeight) * cellH, alignment: .topLeading)
+            Text("Dir")
+                .font(monoFont())
+                .foregroundColor(.white)
+                .frame(width: labelColumnWidth, height: cellH, alignment: .leading)
             Color.clear
                 .frame(width: labelColumnWidth, height: cellH)
         }
@@ -377,6 +383,20 @@ private struct ForecastBlock: View {
             ForEach(values.indices, id: \.self) { i in
                 BarColumn(value: values[i], vmax: vmax, height: barHeight)
                     .id("col-\(i)")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func dirRow(dirs: [Double?], count: Int) -> some View {
+        HStack(spacing: 0) {
+            ForEach(0..<count, id: \.self) { i in
+                let deg = i < dirs.count ? dirs[i] : nil
+                Text(directionArrow(degFrom: deg))
+                    .font(monoFont())
+                    .foregroundColor(Color(rgbHex: 0xf2f6fa))
+                    .frame(width: timeColW, height: cellH)
+                    .background(Color(rgbHex: 0x2a3238))
             }
         }
     }

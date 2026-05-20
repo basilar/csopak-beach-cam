@@ -143,6 +143,7 @@ actor WeatherFetcher {
         var labels: [String] = []
         var ws: [Double] = []
         var gs: [Double] = []
+        var ds: [Double?] = []
 
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = WeatherConstants.timeZone
@@ -186,6 +187,7 @@ actor WeatherFetcher {
             labels.append(String(format: "%02dh", hour))
             ws.append(wspd)
             gs.append(gust)
+            ds.append(tokens.count >= 7 ? Double(tokens[6]) : nil)
             if ws.count >= maxHours { break }
         }
 
@@ -193,7 +195,7 @@ actor WeatherFetcher {
             return ForecastSeries(modelInfo: modelInfo, spotLabel: spot.label,
                                   error: "no forecast rows")
         }
-        return ForecastSeries(hourLabels: labels, windKn: ws, gustKn: gs,
+        return ForecastSeries(hourLabels: labels, windKn: ws, gustKn: gs, dirDeg: ds,
                               modelInfo: modelInfo, spotLabel: spot.label)
     }
 
