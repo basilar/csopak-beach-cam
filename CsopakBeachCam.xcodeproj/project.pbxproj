@@ -243,6 +243,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				1B00000000000000000000A1 /* Shared */,
+				1B00000000000000000000AA /* SharedWeather */,
 				1B00000000000000000000A2 /* CsopakBeachCam */,
 			);
 			name = CsopakBeachCam;
