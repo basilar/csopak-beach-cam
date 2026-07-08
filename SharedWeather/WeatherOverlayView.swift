@@ -362,8 +362,10 @@ private struct ForecastBlock: View {
                 let winds = Array(fc.windKn.prefix(limit))
                 let gusts = Array(fc.gustKn.prefix(limit))
                 let dirs = Array(fc.dirDeg.prefix(limit))
+                let dates = Array(fc.hourDates.prefix(limit))
                 let vmax = max(winds.max() ?? 1, gusts.max() ?? 1, 1)
-                let hlIndex = highlightIndex(dates: Array(fc.hourDates.prefix(limit)))
+                let hlIndex = highlightIndex(dates: dates)
+                let pastCount = pastHourCount(dates: dates)
 
                 HStack(alignment: .top, spacing: 0) {
                     labelColumn(hasHighlightRow: highlightTime != nil)
@@ -377,6 +379,15 @@ private struct ForecastBlock: View {
                                 gustinessRow(winds: winds, gusts: gusts)
                                 dirRow(dirs: dirs, count: hours.count)
                                 hourRow(hours: hours)
+                            }
+                            // Mute the already-elapsed hours so full-brightness
+                            // columns start at the current hour.
+                            .overlay(alignment: .topLeading) {
+                                if pastCount > 0 {
+                                    Color.black.opacity(0.6)
+                                        .frame(width: CGFloat(pastCount) * timeColW)
+                                        .allowsHitTesting(false)
+                                }
                             }
                         }
                         .onAppear { scrollToStart(proxy: proxy, count: hours.count) }
@@ -435,6 +446,16 @@ private struct ForecastBlock: View {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = WeatherConstants.timeZone
         return dates.firstIndex { cal.isDate($0, equalTo: highlightTime, toGranularity: .hour) }
+    }
+
+    /// Leading columns whose hour has already fully elapsed (the fetcher keeps
+    /// rows from up to two hours back — see `cutoff` in WeatherFetcher).
+    private func pastHourCount(dates: [Date]) -> Int {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = WeatherConstants.timeZone
+        let now = Date()
+        let topOfHour = cal.date(from: cal.dateComponents([.year, .month, .day, .hour], from: now)) ?? now
+        return dates.prefix(while: { $0 < topOfHour }).count
     }
 
     @ViewBuilder
