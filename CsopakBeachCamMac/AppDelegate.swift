@@ -90,6 +90,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             rootView: ContentView(streamManager: streamManager, showWeather: false)
                 .frame(width: Self.popoverSize.width, height: Self.popoverSize.height)
         )
+        // The popover is fixed-size; letting SwiftUI drive sizing from inside
+        // a layout pass trips AppKit's layout-recursion warning.
+        host.sizingOptions = []
         host.frame = container.bounds
         host.autoresizingMask = [.width, .height]
         container.addSubview(host)
@@ -118,9 +121,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "Csopak Beach Cam"
         window.isReleasedWhenClosed = false
         window.contentMinSize = Self.popoverSize
-        window.contentView = NSHostingView(
+        let host = NSHostingView(
             rootView: ContentView(streamManager: streamManager)
         )
+        // Window size comes from the autosaved frame + contentMinSize;
+        // SwiftUI-driven sizing here can recurse into layout.
+        host.sizingOptions = []
+        window.contentView = host
         window.delegate = self
 
         window.setFrameAutosaveName(Self.detachedFrameAutosaveName)

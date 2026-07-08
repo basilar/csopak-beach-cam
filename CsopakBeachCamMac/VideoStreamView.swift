@@ -15,14 +15,26 @@ struct VideoStreamView: NSViewRepresentable {
         view.allowsPictureInPicturePlayback = false
         view.videoGravity = .resizeAspect
         context.coordinator.onReloadRequested = onReloadRequested
-        context.coordinator.attach(to: view, url: url)
+        // Attaching the player mid-update triggers AppKit's layout-recursion
+        // warning (AVPlayerView forces layout when the player is set), so
+        // defer it out of the current SwiftUI layout pass.
+        deferredAttach(to: view, coordinator: context.coordinator)
         return view
     }
 
     func updateNSView(_ nsView: AVPlayerView, context: Context) {
         context.coordinator.onReloadRequested = onReloadRequested
         if context.coordinator.currentURL != url {
-            context.coordinator.attach(to: nsView, url: url)
+            deferredAttach(to: nsView, coordinator: context.coordinator)
+        }
+    }
+
+    private func deferredAttach(to view: AVPlayerView, coordinator: Coordinator) {
+        let url = url
+        DispatchQueue.main.async {
+            if coordinator.currentURL != url {
+                coordinator.attach(to: view, url: url)
+            }
         }
     }
 

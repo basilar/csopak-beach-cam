@@ -317,7 +317,7 @@ private struct ForecastBlock: View {
     let lastUpdated: Date
     var highlightTime: Date? = nil
 
-    private let barHeight: Int = 5
+    private let chartRows: Int = 6
     private let labelColumnWidth: CGFloat = 36
     private let highlightH: CGFloat = 3
 
@@ -358,8 +358,8 @@ private struct ForecastBlock: View {
                                 if highlightTime != nil {
                                     highlightRow(count: hours.count, hlIndex: hlIndex)
                                 }
-                                valueRow(values: winds, vmax: vmax)
-                                valueRow(values: gusts, vmax: vmax)
+                                combinedRow(winds: winds, gusts: gusts, vmax: vmax)
+                                gustinessRow(winds: winds, gusts: gusts)
                                 dirRow(dirs: dirs, count: hours.count)
                                 hourRow(hours: hours)
                             }
@@ -383,14 +383,19 @@ private struct ForecastBlock: View {
                 Color.clear
                     .frame(width: labelColumnWidth, height: highlightH)
             }
-            Text("Wind")
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Gust")
+                    .font(monoFont())
+                    .foregroundColor(.white.opacity(0.6))
+                Text("Wind")
+                    .font(monoFont())
+                    .foregroundColor(.white)
+            }
+            .frame(width: labelColumnWidth, height: CGFloat(chartRows) * cellH, alignment: .topLeading)
+            Text("G ×")
                 .font(monoFont())
                 .foregroundColor(.white)
-                .frame(width: labelColumnWidth, height: CGFloat(barHeight) * cellH, alignment: .topLeading)
-            Text("Gust")
-                .font(monoFont())
-                .foregroundColor(.white)
-                .frame(width: labelColumnWidth, height: CGFloat(barHeight) * cellH, alignment: .topLeading)
+                .frame(width: labelColumnWidth, height: cellH, alignment: .leading)
             Text("Dir")
                 .font(monoFont())
                 .foregroundColor(.white)
@@ -418,13 +423,45 @@ private struct ForecastBlock: View {
     }
 
     @ViewBuilder
-    private func valueRow(values: [Double], vmax: Double) -> some View {
+    private func combinedRow(winds: [Double], gusts: [Double], vmax: Double) -> some View {
         HStack(spacing: 0) {
-            ForEach(values.indices, id: \.self) { i in
-                BarColumn(value: values[i], vmax: vmax, height: barHeight)
+            ForEach(winds.indices, id: \.self) { i in
+                CombinedBarColumn(wind: winds[i],
+                                  gust: i < gusts.count ? gusts[i] : winds[i],
+                                  vmax: vmax,
+                                  height: chartRows)
                     .id("col-\(i)")
             }
         }
+    }
+
+    @ViewBuilder
+    private func gustinessRow(winds: [Double], gusts: [Double]) -> some View {
+        HStack(spacing: 0) {
+            ForEach(winds.indices, id: \.self) { i in
+                let wind = winds[i]
+                let gust = i < gusts.count ? gusts[i] : wind
+                if wind > 0.5 {
+                    let ratio = gust / wind
+                    Text(String(format: "%.1f", ratio))
+                        .font(monoFont(weight: .regular))
+                        .foregroundColor(gustinessColor(ratio))
+                        .frame(width: timeColW, height: cellH)
+                } else {
+                    Text("—")
+                        .font(monoFont(weight: .regular))
+                        .foregroundColor(.white.opacity(0.4))
+                        .frame(width: timeColW, height: cellH)
+                }
+            }
+        }
+    }
+
+    private func gustinessColor(_ ratio: Double) -> Color {
+        if ratio >= 2.0 { return Color(rgbHex: 0xff5a5a) }
+        if ratio >= 1.6 { return .orange }
+        if ratio >= 1.3 { return .yellow }
+        return .white.opacity(0.55)
     }
 
     @ViewBuilder
@@ -462,35 +499,67 @@ private struct ForecastBlock: View {
     }
 }
 
-private struct BarColumn: View {
-    let value: Double
+/// One column of the collapsed wind+gust chart: a solid wind bar with a
+/// translucent gust extension above it. The top cell of each segment carries
+/// its numeric value.
+private struct CombinedBarColumn: View {
+    let wind: Double
+    let gust: Double
     let vmax: Double
     let height: Int
 
     var body: some View {
-        let style = beaufortStyleKn(value)
-        let filled = filledRows()
-        let topRow = height - filled
+        let windStyle = beaufortStyleKn(wind)
+        let gustStyle = beaufortStyleKn(gust)
+        let windRows = filledRows(for: wind)
+        // Keep the gust cap at least one row above the wind cap whenever the
+        // gust is stronger, so its value stays visible.
+        let gustRows: Int = gust > wind
+            ? min(height, max(filledRows(for: gust), windRows + 1))
+            : windRows
+        let windTop = height - windRows
+        let gustTop = height - gustRows
+
         VStack(spacing: 0) {
             ForEach(0..<height, id: \.self) { r in
-                if r < topRow {
+                if r < gustTop {
                     Color.clear.frame(width: timeColW, height: cellH)
-                } else if r == topRow {
-                    Text("\(Int(round(value)))")
+                } else if r == gustTop && gustRows > windRows {
+                    Text("\(Int(round(gust)))")
                         .font(monoFont())
-                        .foregroundColor(style.fg)
+                        .foregroundColor(gustStyle.fg)
                         .frame(width: timeColW, height: cellH)
-                        .background(style.bg)
+                        .background(gustStyle.bg)
+                } else if r < windTop {
+                    Color.clear
+                        .frame(width: timeColW, height: cellH)
+                        .background(gustStyle.bg)
+                } else if r == windTop {
+                    Text("\(Int(round(wind)))")
+                        .font(monoFont())
+                        .foregroundColor(Color(rgbHex: 0x1d1d1d))
+                        .frame(width: timeColW, height: cellH)
+                        .background(lightBand(windStyle))
                 } else {
                     Color.clear
                         .frame(width: timeColW, height: cellH)
-                        .background(style.bg)
+                        .background(lightBand(windStyle))
                 }
             }
         }
     }
 
-    private func filledRows() -> Int {
+    // Light pastel tint of the wind's beaufort color: composited over white
+    // so the lower wind bar reads faded/light, letting the solid gust band
+    // above it carry the definitive color.
+    private func lightBand(_ style: CellStyle) -> some View {
+        ZStack {
+            Color.white
+            style.bg.opacity(0.5)
+        }
+    }
+
+    private func filledRows(for value: Double) -> Int {
         if value <= 0 || vmax <= 0 { return 0 }
         let n = Int(round((value / vmax) * Double(height)))
         return max(1, min(height, n))
