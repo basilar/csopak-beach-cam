@@ -12,6 +12,9 @@ private func monoFont(weight: Font.Weight = .bold) -> Font {
 
 struct WeatherOverlayView: View {
     @ObservedObject var viewModel: WeatherViewModel
+    var isMapMode: Bool = false
+    var onToggleMapMode: (() -> Void)? = nil
+    var highlightTime: Date? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -39,7 +42,8 @@ struct WeatherOverlayView: View {
                     ForecastBlock(name: name,
                                   fc: viewModel.snapshot.forecasts[name],
                                   isLoading: viewModel.isLoading,
-                                  lastUpdated: viewModel.snapshot.lastUpdated)
+                                  lastUpdated: viewModel.snapshot.lastUpdated,
+                                  highlightTime: highlightTime)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -68,6 +72,15 @@ struct WeatherOverlayView: View {
                 .truncationMode(.tail)
             Spacer()
             #if os(macOS)
+            if let onToggleMapMode {
+                Button {
+                    onToggleMapMode()
+                } label: {
+                    Image(systemName: isMapMode ? "video" : "map")
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.white.opacity(0.85))
+            }
             Button {
                 Task { await viewModel.refresh() }
             } label: {
@@ -302,9 +315,11 @@ private struct ForecastBlock: View {
     let fc: ForecastSeries?
     let isLoading: Bool
     let lastUpdated: Date
+    var highlightTime: Date? = nil
 
     private let barHeight: Int = 5
     private let labelColumnWidth: CGFloat = 36
+    private let highlightH: CGFloat = 3
 
     private var headerLabel: String {
         let spot = fc?.spotLabel.isEmpty == false ? fc!.spotLabel : name
@@ -333,12 +348,16 @@ private struct ForecastBlock: View {
                 let gusts = Array(fc.gustKn.prefix(limit))
                 let dirs = Array(fc.dirDeg.prefix(limit))
                 let vmax = max(winds.max() ?? 1, gusts.max() ?? 1, 1)
+                let hlIndex = highlightIndex(dates: Array(fc.hourDates.prefix(limit)))
 
                 HStack(alignment: .top, spacing: 0) {
-                    labelColumn
+                    labelColumn(hasHighlightRow: highlightTime != nil)
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
                             VStack(alignment: .leading, spacing: 1) {
+                                if highlightTime != nil {
+                                    highlightRow(count: hours.count, hlIndex: hlIndex)
+                                }
                                 valueRow(values: winds, vmax: vmax)
                                 valueRow(values: gusts, vmax: vmax)
                                 dirRow(dirs: dirs, count: hours.count)
@@ -358,8 +377,12 @@ private struct ForecastBlock: View {
         }
     }
 
-    private var labelColumn: some View {
+    private func labelColumn(hasHighlightRow: Bool) -> some View {
         VStack(alignment: .leading, spacing: 1) {
+            if hasHighlightRow {
+                Color.clear
+                    .frame(width: labelColumnWidth, height: highlightH)
+            }
             Text("Wind")
                 .font(monoFont())
                 .foregroundColor(.white)
@@ -375,6 +398,23 @@ private struct ForecastBlock: View {
             Color.clear
                 .frame(width: labelColumnWidth, height: cellH)
         }
+    }
+
+    @ViewBuilder
+    private func highlightRow(count: Int, hlIndex: Int?) -> some View {
+        HStack(spacing: 0) {
+            ForEach(0..<count, id: \.self) { i in
+                (i == hlIndex ? Color.yellow : Color.clear)
+                    .frame(width: timeColW, height: highlightH)
+            }
+        }
+    }
+
+    private func highlightIndex(dates: [Date]) -> Int? {
+        guard let highlightTime else { return nil }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = WeatherConstants.timeZone
+        return dates.firstIndex { cal.isDate($0, equalTo: highlightTime, toGranularity: .hour) }
     }
 
     @ViewBuilder

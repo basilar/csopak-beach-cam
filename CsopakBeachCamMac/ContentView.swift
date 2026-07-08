@@ -4,6 +4,8 @@ struct ContentView: View {
     @StateObject private var streamManager: StreamManager
     @StateObject private var sleepBlocker = DisplaySleepBlocker()
     @StateObject private var weather = WeatherViewModel()
+    @StateObject private var mapModel = BalatonMapViewModel()
+    @State private var isMapMode = false
     private let showWeather: Bool
 
     @MainActor
@@ -23,18 +25,36 @@ struct ContentView: View {
                     .background(Color.black)
             } else if let streamURL = streamManager.streamURL {
                 ZStack(alignment: .top) {
-                    VideoStreamView(url: streamURL) {
-                        Task { await streamManager.fetchStreamURL() }
+                    if isMapMode && showWeather {
+                        BalatonMapView(viewModel: mapModel)
+                            .background(Color.black)
+                    } else {
+                        VideoStreamView(url: streamURL) {
+                            Task { await streamManager.fetchStreamURL() }
+                        }
+                        .background(Color.black)
                     }
-                    .background(Color.black)
                     if showWeather {
                         if weather.visible {
-                            WeatherOverlayView(viewModel: weather)
+                            WeatherOverlayView(viewModel: weather,
+                                               isMapMode: isMapMode,
+                                               onToggleMapMode: { isMapMode.toggle() },
+                                               highlightTime: isMapMode ? mapModel.currentFrame?.validTime : nil)
                                 .padding(8)
                                 .allowsHitTesting(true)
                         } else {
                             HStack {
                                 Spacer()
+                                Button {
+                                    isMapMode.toggle()
+                                } label: {
+                                    Image(systemName: isMapMode ? "video" : "map")
+                                        .foregroundColor(.white)
+                                        .padding(6)
+                                        .background(Color.black.opacity(0.5))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(.plain)
                                 Button {
                                     weather.visible = true
                                 } label: {

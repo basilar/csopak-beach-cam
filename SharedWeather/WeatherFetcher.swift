@@ -141,6 +141,7 @@ actor WeatherFetcher {
         }
 
         var labels: [String] = []
+        var dates: [Date] = []
         var ws: [Double] = []
         var gs: [Double] = []
         var ds: [Double?] = []
@@ -185,6 +186,7 @@ actor WeatherFetcher {
             guard let rowDate = cal.date(from: dc), rowDate >= cutoff else { continue }
 
             labels.append(String(format: "%02dh", hour))
+            dates.append(rowDate)
             ws.append(wspd)
             gs.append(gust)
             ds.append(tokens.count >= 7 ? Double(tokens[6]) : nil)
@@ -195,7 +197,7 @@ actor WeatherFetcher {
             return ForecastSeries(modelInfo: modelInfo, spotLabel: spot.label,
                                   error: "no forecast rows")
         }
-        return ForecastSeries(hourLabels: labels, windKn: ws, gustKn: gs, dirDeg: ds,
+        return ForecastSeries(hourLabels: labels, hourDates: dates, windKn: ws, gustKn: gs, dirDeg: ds,
                               modelInfo: modelInfo, spotLabel: spot.label)
     }
 

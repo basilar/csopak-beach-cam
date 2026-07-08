@@ -50,6 +50,7 @@ struct ObsSeries {
 
 struct ForecastSeries {
     var hourLabels: [String] = []
+    var hourDates: [Date] = []
     var windKn: [Double] = []
     var gustKn: [Double] = []
     var dirDeg: [Double?] = []
