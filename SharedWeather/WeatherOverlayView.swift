@@ -154,18 +154,26 @@ private struct StationObsBlock: View {
                         minuteValuesRow(slotKeys: slotKeys)
                         kValuesRow(slotKeys: slotKeys) { sk in
                             let r = rowBySlot[sk].flatMap { series.rows[safe: $0] }
-                            return msToKn(r?.fsMs)
+                            return msToKn(r?.fxMs)
                         }
                         kValuesRow(slotKeys: slotKeys) { sk in
                             let r = rowBySlot[sk].flatMap { series.rows[safe: $0] }
-                            return msToKn(r?.fxMs)
+                            return msToKn(r?.fsMs)
                         }
-                        dirValuesRow(slotKeys: slotKeys) { sk in
-                            rowBySlot[sk].flatMap { series.rows[safe: $0] }?.fsdDeg
-                        }
-                        dirValuesRow(slotKeys: slotKeys) { sk in
-                            rowBySlot[sk].flatMap { series.rows[safe: $0] }?.fxdDeg
-                        }
+                        dirValuesRow(slotKeys: slotKeys,
+                                     value: { sk in
+                                         rowBySlot[sk].flatMap { series.rows[safe: $0] }?.fxdDeg
+                                     },
+                                     other: { sk in
+                                         rowBySlot[sk].flatMap { series.rows[safe: $0] }?.fsdDeg
+                                     })
+                        dirValuesRow(slotKeys: slotKeys,
+                                     value: { sk in
+                                         rowBySlot[sk].flatMap { series.rows[safe: $0] }?.fsdDeg
+                                     },
+                                     other: { sk in
+                                         rowBySlot[sk].flatMap { series.rows[safe: $0] }?.fxdDeg
+                                     })
                         if series.hasTemp {
                             tempValuesRow(slotKeys: slotKeys) { sk in
                                 rowBySlot[sk].flatMap { series.rows[safe: $0] }?.taC
@@ -193,19 +201,19 @@ private struct StationObsBlock: View {
                 .frame(width: labelW, height: cellH, alignment: .leading)
             Color.clear
                 .frame(width: labelW, height: cellH)
-            Text("Wind (kn)")
-                .font(monoFont())
-                .foregroundColor(.white)
-                .frame(width: labelW, height: cellH, alignment: .leading)
             Text("Gust (kn)")
                 .font(monoFont())
                 .foregroundColor(.white)
                 .frame(width: labelW, height: cellH, alignment: .leading)
-            Text("Dir mean")
+            Text("Wind (kn)")
                 .font(monoFont())
                 .foregroundColor(.white)
                 .frame(width: labelW, height: cellH, alignment: .leading)
             Text("Dir gust")
+                .font(monoFont())
+                .foregroundColor(.white)
+                .frame(width: labelW, height: cellH, alignment: .leading)
+            Text("Dir mean")
                 .font(monoFont())
                 .foregroundColor(.white)
                 .frame(width: labelW, height: cellH, alignment: .leading)
@@ -267,15 +275,22 @@ private struct StationObsBlock: View {
     }
 
     @ViewBuilder
-    private func dirValuesRow(slotKeys: [String], value: @escaping (String) -> Double?) -> some View {
+    private func dirValuesRow(slotKeys: [String],
+                              value: @escaping (String) -> Double?,
+                              other: @escaping (String) -> Double?) -> some View {
         HStack(spacing: 0) {
             ForEach(slotKeys, id: \.self) { sk in
-                let arrow = directionArrow(degFrom: value(sk))
+                let deg = value(sk)
+                let otherDeg = other(sk)
+                let arrow = directionArrow(degFrom: deg)
+                // Flag slots where wind and gust point to different sectors.
+                let differs = deg != nil && otherDeg != nil
+                    && arrow != directionArrow(degFrom: otherDeg)
                 Text(arrow)
                     .font(monoFont())
-                    .foregroundColor(Color(rgbHex: 0xf2f6fa))
+                    .foregroundColor(differs ? Color(rgbHex: 0xffd75e) : Color(rgbHex: 0xf2f6fa))
                     .frame(width: timeColW, height: cellH)
-                    .background(Color(rgbHex: 0x2a3238))
+                    .background(differs ? Color(rgbHex: 0x5c4a12) : Color(rgbHex: 0x2a3238))
             }
         }
     }
