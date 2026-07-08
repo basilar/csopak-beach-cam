@@ -15,6 +15,9 @@ struct WeatherOverlayView: View {
     var isMapMode: Bool = false
     var onToggleMapMode: (() -> Void)? = nil
     var highlightTime: Date? = nil
+    var onSelectTime: ((Date) -> Void)? = nil
+    /// Extra work to run alongside a manual refresh (e.g. reloading the maps).
+    var onRefresh: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -43,7 +46,8 @@ struct WeatherOverlayView: View {
                                   fc: viewModel.snapshot.forecasts[name],
                                   isLoading: viewModel.isLoading,
                                   lastUpdated: viewModel.snapshot.lastUpdated,
-                                  highlightTime: highlightTime)
+                                  highlightTime: highlightTime,
+                                  onSelectTime: onSelectTime)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -83,6 +87,7 @@ struct WeatherOverlayView: View {
             }
             Button {
                 Task { await viewModel.refresh() }
+                onRefresh?()
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
@@ -331,10 +336,10 @@ private struct ForecastBlock: View {
     let isLoading: Bool
     let lastUpdated: Date
     var highlightTime: Date? = nil
+    var onSelectTime: ((Date) -> Void)? = nil
 
     private let chartRows: Int = 6
     private let labelColumnWidth: CGFloat = 36
-    private let highlightH: CGFloat = 3
 
     private var headerLabel: String {
         let spot = fc?.spotLabel.isEmpty == false ? fc!.spotLabel : name
@@ -357,7 +362,7 @@ private struct ForecastBlock: View {
                     .foregroundColor(.white.opacity(0.6))
                     .frame(height: cellH * 5)
             } else if let fc {
-                let limit = min(24, min(fc.windKn.count, fc.gustKn.count))
+                let limit = min(WeatherConstants.forecastDisplayHours, min(fc.windKn.count, fc.gustKn.count))
                 let hours = Array(fc.hourLabels.prefix(limit))
                 let winds = Array(fc.windKn.prefix(limit))
                 let gusts = Array(fc.gustKn.prefix(limit))
@@ -368,13 +373,10 @@ private struct ForecastBlock: View {
                 let pastCount = pastHourCount(dates: dates)
 
                 HStack(alignment: .top, spacing: 0) {
-                    labelColumn(hasHighlightRow: highlightTime != nil)
+                    labelColumn()
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
                             VStack(alignment: .leading, spacing: 1) {
-                                if highlightTime != nil {
-                                    highlightRow(count: hours.count, hlIndex: hlIndex)
-                                }
                                 combinedRow(winds: winds, gusts: gusts, vmax: vmax)
                                 gustinessRow(winds: winds, gusts: gusts)
                                 dirRow(dirs: dirs, count: hours.count)
@@ -389,13 +391,45 @@ private struct ForecastBlock: View {
                                         .allowsHitTesting(false)
                                 }
                             }
+                            // Frame the forecast slice matching the selected map frame.
+                            .overlay(alignment: .topLeading) {
+                                if let hlIndex {
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .strokeBorder(Color.yellow, lineWidth: 2)
+                                        .frame(width: timeColW)
+                                        .offset(x: CGFloat(hlIndex) * timeColW)
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                            // Click a slice to jump the map to that hour.
+                            .overlay(alignment: .topLeading) {
+                                if let onSelectTime {
+                                    HStack(spacing: 0) {
+                                        ForEach(dates.indices, id: \.self) { i in
+                                            Color.clear
+                                                .frame(width: timeColW)
+                                                .contentShape(Rectangle())
+                                                .onTapGesture { onSelectTime(dates[i]) }
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        .onAppear { scrollToStart(proxy: proxy, count: hours.count) }
+                        .onAppear {
+                            if hlIndex == nil {
+                                scrollToStart(proxy: proxy, count: hours.count)
+                            } else {
+                                scrollToHighlight(proxy: proxy, index: hlIndex)
+                            }
+                        }
                         .onChange(of: hours) { _, newHours in
                             scrollToStart(proxy: proxy, count: newHours.count)
                         }
                         .onChange(of: lastUpdated) { _, _ in
                             scrollToStart(proxy: proxy, count: hours.count)
+                        }
+                        .onChange(of: hlIndex) { _, newIndex in
+                            scrollToHighlight(proxy: proxy, index: newIndex)
                         }
                     }
                 }
@@ -403,12 +437,8 @@ private struct ForecastBlock: View {
         }
     }
 
-    private func labelColumn(hasHighlightRow: Bool) -> some View {
+    private func labelColumn() -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            if hasHighlightRow {
-                Color.clear
-                    .frame(width: labelColumnWidth, height: highlightH)
-            }
             VStack(alignment: .leading, spacing: 0) {
                 Text("Gust")
                     .font(monoFont())
@@ -428,16 +458,6 @@ private struct ForecastBlock: View {
                 .frame(width: labelColumnWidth, height: cellH, alignment: .leading)
             Color.clear
                 .frame(width: labelColumnWidth, height: cellH)
-        }
-    }
-
-    @ViewBuilder
-    private func highlightRow(count: Int, hlIndex: Int?) -> some View {
-        HStack(spacing: 0) {
-            ForEach(0..<count, id: \.self) { i in
-                (i == hlIndex ? Color.yellow : Color.clear)
-                    .frame(width: timeColW, height: highlightH)
-            }
         }
     }
 
@@ -531,6 +551,18 @@ private struct ForecastBlock: View {
         guard count > 0 else { return }
         DispatchQueue.main.async {
             proxy.scrollTo("col-0", anchor: .leading)
+        }
+    }
+
+    /// Keep the highlighted hour visible while stepping through map frames.
+    /// The nil anchor scrolls the minimum needed, so nothing moves as long as
+    /// the column is already on screen.
+    private func scrollToHighlight(proxy: ScrollViewProxy, index: Int?) {
+        guard let index else { return }
+        DispatchQueue.main.async {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                proxy.scrollTo("col-\(index)", anchor: nil)
+            }
         }
     }
 }

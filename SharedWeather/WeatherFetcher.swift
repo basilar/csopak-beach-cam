@@ -154,7 +154,7 @@ actor WeatherFetcher {
         var lastDay: Int? = nil
         let now = Date()
         let topOfHour = cal.date(from: cal.dateComponents([.year, .month, .day, .hour], from: now)) ?? now
-        let cutoff = cal.date(byAdding: .hour, value: -2, to: topOfHour) ?? topOfHour
+        let cutoff = cal.date(byAdding: .hour, value: -WeatherConstants.forecastPastHours, to: topOfHour) ?? topOfHour
 
         for raw in pre.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline }) {
             let line = String(raw)

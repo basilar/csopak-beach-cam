@@ -79,7 +79,9 @@ struct ContentView: View {
             WeatherOverlayView(viewModel: weather,
                                isMapMode: isMapMode,
                                onToggleMapMode: { isMapMode.toggle() },
-                               highlightTime: isMapMode ? mapModel.currentFrame?.validTime : nil)
+                               highlightTime: isMapMode ? mapModel.currentFrame?.validTime : nil,
+                               onSelectTime: isMapMode ? { mapModel.select(closestTo: $0) } : nil,
+                               onRefresh: isMapMode ? { Task { await mapModel.load() } } : nil)
                 .padding(8)
         } else {
             HStack {

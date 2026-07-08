@@ -10,6 +10,13 @@ enum WeatherConstants {
     static let msToKn = 1.9438444924384
     static let timeZone = TimeZone(identifier: "Europe/Budapest") ?? TimeZone(secondsFromGMT: 3600)!
 
+    /// Already-elapsed hours kept at the start of the forecast (rendered dimmed).
+    static let forecastPastHours = 2
+    /// Maximum hourly bars the prediction graph displays. Consumers that need to
+    /// cover the same span (e.g. the Balaton forecast maps) derive their window
+    /// from these two values.
+    static let forecastDisplayHours = 24
+
     /// Windguru spots paired with each MET observation station. Keys match `targetNames`.
     static let windguruSpots: [String: WindguruSpot] = [
         "Balatonfüred": WindguruSpot(stationName: "Balatonfüred", id: 1239621, label: "Palóznaki Öböl", isCustom: true),

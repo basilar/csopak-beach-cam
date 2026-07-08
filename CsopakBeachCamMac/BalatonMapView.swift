@@ -5,8 +5,9 @@ import AppKit
 /// https://met.hu/idojaras/tavaink/balaton/ ("Térképes modell előrejelzés").
 /// The embedded page lists frames like `mwWB20260708_0000+00700.jpg`:
 /// `<runYYYYMMDD>_<runHHMM>` is the model run in UTC and `+HHHMM` the lead
-/// time, so the valid time is run + lead. Only frames whose valid time falls
-/// on the current Budapest calendar day are kept.
+/// time, so the valid time is run + lead. Frames are kept for the same window
+/// the prediction graph displays — `forecastPastHours` back through the last
+/// of its `forecastDisplayHours` hourly bars — so every future bar has a map.
 @MainActor
 final class BalatonMapViewModel: ObservableObject {
     struct Frame: Equatable {
@@ -21,7 +22,7 @@ final class BalatonMapViewModel: ObservableObject {
     @Published var index = 0
 
     private static let pageURL = URL(string: "https://met.hu/idojaras/tavaink/balaton/modellek/main.php?frm=1")!
-    private var loadedDay: Date?
+    private var loadedHour: Date?
 
     var currentFrame: Frame? {
         frames.indices.contains(index) ? frames[index] : nil
@@ -32,8 +33,9 @@ final class BalatonMapViewModel: ObservableObject {
     }
 
     func loadIfNeeded() async {
-        let today = calendar().startOfDay(for: Date())
-        if loadedDay == today, !frames.isEmpty { return }
+        // The kept window slides every hour, so a per-day cache isn't enough.
+        let hour = Self.topOfHour(Date())
+        if loadedHour == hour, !frames.isEmpty { return }
         await load()
     }
 
@@ -51,14 +53,14 @@ final class BalatonMapViewModel: ObservableObject {
                 error = "Map page could not be decoded"
                 return
             }
-            let parsed = Self.parseTodayFrames(html: html, now: Date())
+            let parsed = Self.parseFrames(html: html, now: Date())
             guard !parsed.isEmpty else {
-                error = "No map images for today"
+                error = "No map images in the forecast window"
                 return
             }
             error = ""
             frames = parsed
-            loadedDay = calendar().startOfDay(for: Date())
+            loadedHour = Self.topOfHour(Date())
 
             // Start at the frame closest to now so the map opens on current weather.
             let now = Date()
@@ -82,6 +84,14 @@ final class BalatonMapViewModel: ObservableObject {
         if index < frames.count - 1 { index += 1 }
     }
 
+    func select(closestTo time: Date) {
+        guard let best = frames.indices.min(by: {
+            abs(frames[$0].validTime.timeIntervalSince(time))
+                < abs(frames[$1].validTime.timeIntervalSince(time))
+        }) else { return }
+        index = best
+    }
+
     private func prefetchImages(for frames: [Frame]) async {
         await withTaskGroup(of: (URL, NSImage?).self) { group in
             for frame in frames where images[frame.url] == nil {
@@ -99,7 +109,7 @@ final class BalatonMapViewModel: ObservableObject {
         }
     }
 
-    nonisolated private static func parseTodayFrames(html: String, now: Date) -> [Frame] {
+    nonisolated private static func parseFrames(html: String, now: Date) -> [Frame] {
         var basePath = "/img/mwWB/"
         if let match = html.firstMatch(of: #/var keplink="([^"]+)"/#) {
             basePath = String(match.1)
@@ -110,6 +120,16 @@ final class BalatonMapViewModel: ObservableObject {
         runFormatter.dateFormat = "yyyyMMdd_HHmm"
 
         let cal = calendar()
+        // Same span as the prediction graph: bars run from `forecastPastHours`
+        // before the current hour through displayHours-1 hourly steps.
+        let topOfHour = Self.topOfHour(now)
+        let windowStart = cal.date(byAdding: .hour,
+                                   value: -WeatherConstants.forecastPastHours,
+                                   to: topOfHour) ?? topOfHour
+        let windowEnd = cal.date(byAdding: .hour,
+                                 value: WeatherConstants.forecastDisplayHours
+                                     - WeatherConstants.forecastPastHours - 1,
+                                 to: topOfHour) ?? topOfHour
         var seen = Set<URL>()
         var frames: [Frame] = []
         for match in html.matches(of: #/(mw\w+(\d{8}_\d{4})\+(\d{3})(\d{2})\.jpg)/#) {
@@ -120,11 +140,17 @@ final class BalatonMapViewModel: ObservableObject {
                   !seen.contains(url) else { continue }
             seen.insert(url)
             let validTime = runTime.addingTimeInterval(TimeInterval(leadHours * 3600 + leadMinutes * 60))
-            if cal.isDate(validTime, inSameDayAs: now) {
+            if validTime >= windowStart && validTime <= windowEnd {
                 frames.append(Frame(url: url, validTime: validTime))
             }
         }
         return frames.sorted { $0.validTime < $1.validTime }
+    }
+
+    nonisolated private static func topOfHour(_ date: Date) -> Date {
+        let cal = calendar()
+        let comps = cal.dateComponents([.year, .month, .day, .hour], from: date)
+        return cal.date(from: comps) ?? date
     }
 
     nonisolated private static func calendar() -> Calendar {
