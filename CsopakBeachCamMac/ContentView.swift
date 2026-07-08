@@ -24,49 +24,24 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.black)
             } else if let streamURL = streamManager.streamURL {
-                ZStack(alignment: .top) {
+                Group {
                     if isMapMode && showWeather {
-                        BalatonMapView(viewModel: mapModel)
-                            .background(Color.black)
-                    } else {
-                        VideoStreamView(url: streamURL) {
-                            Task { await streamManager.fetchStreamURL() }
+                        // Maps sit below the weather overlay, not behind it.
+                        VStack(alignment: .leading, spacing: 0) {
+                            weatherBar
+                            BalatonMapView(viewModel: mapModel)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                         .background(Color.black)
-                    }
-                    if showWeather {
-                        if weather.visible {
-                            WeatherOverlayView(viewModel: weather,
-                                               isMapMode: isMapMode,
-                                               onToggleMapMode: { isMapMode.toggle() },
-                                               highlightTime: isMapMode ? mapModel.currentFrame?.validTime : nil)
-                                .padding(8)
-                                .allowsHitTesting(true)
-                        } else {
-                            HStack {
-                                Spacer()
-                                Button {
-                                    isMapMode.toggle()
-                                } label: {
-                                    Image(systemName: isMapMode ? "video" : "map")
-                                        .foregroundColor(.white)
-                                        .padding(6)
-                                        .background(Color.black.opacity(0.5))
-                                        .clipShape(Circle())
-                                }
-                                .buttonStyle(.plain)
-                                Button {
-                                    weather.visible = true
-                                } label: {
-                                    Image(systemName: "eye")
-                                        .foregroundColor(.white)
-                                        .padding(6)
-                                        .background(Color.black.opacity(0.5))
-                                        .clipShape(Circle())
-                                }
-                                .buttonStyle(.plain)
+                    } else {
+                        ZStack(alignment: .top) {
+                            VideoStreamView(url: streamURL) {
+                                Task { await streamManager.fetchStreamURL() }
                             }
-                            .padding(8)
+                            .background(Color.black)
+                            if showWeather {
+                                weatherBar
+                            }
                         }
                     }
                 }
@@ -95,6 +70,42 @@ struct ContentView: View {
             if streamManager.streamURL == nil {
                 await streamManager.fetchStreamURL()
             }
+        }
+    }
+
+    @ViewBuilder
+    private var weatherBar: some View {
+        if weather.visible {
+            WeatherOverlayView(viewModel: weather,
+                               isMapMode: isMapMode,
+                               onToggleMapMode: { isMapMode.toggle() },
+                               highlightTime: isMapMode ? mapModel.currentFrame?.validTime : nil)
+                .padding(8)
+        } else {
+            HStack {
+                Spacer()
+                Button {
+                    isMapMode.toggle()
+                } label: {
+                    Image(systemName: isMapMode ? "video" : "map")
+                        .foregroundColor(.white)
+                        .padding(6)
+                        .background(Color.black.opacity(0.5))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                Button {
+                    weather.visible = true
+                } label: {
+                    Image(systemName: "eye")
+                        .foregroundColor(.white)
+                        .padding(6)
+                        .background(Color.black.opacity(0.5))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(8)
         }
     }
 }

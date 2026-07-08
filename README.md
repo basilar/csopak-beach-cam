@@ -8,9 +8,9 @@ SwiftUI clients for a live beach camera in Csopak, Hungary, powered by [IPCamLiv
 
 | Target | Behavior |
 |--------|----------|
-| **iOS** (`CsopakBeachCam`) | Embeds the IPCamLive web player in a `WKWebView` with inline playback and pinch-to-zoom. The idle timer is disabled so the screen stays on while you watch. |
+| **iOS** (`CsopakBeachCam`) | Embeds the IPCamLive web player in a `WKWebView` with inline playback and pinch-to-zoom. The idle timer is disabled so the screen stays on while you watch. Rotating to landscape shows the same wind/forecast overlay as macOS/tvOS across the top of the video, plus a key button for entering Windguru PRO credentials. |
 | **tvOS** (`CsopakBeachCamTV`) | Resolves the HLS stream URL and plays it with `AVPlayerViewController` (chrome-less — no transport bar, no PiP/volume buttons). The same MET.hu wind/forecast overlay used on macOS is pinned to the top of the screen, always visible, covering the in-stream watermark. |
-| **macOS** (`CsopakBeachCamMac`) | Menu-bar-only app (no Dock icon). Click the menu bar icon to drop down a small live preview; click anywhere inside the preview to detach it as a resizable window; click the menu bar icon again to re-attach. Right-click the icon for **Quit**. The detached window's position and size are remembered between sessions. Display sleep is suppressed via `IOPMAssertion` while the stream is playing. The HLS stream is played with `AVPlayerView` (no transport controls or hover dimming). The detached window also overlays live wind data and a short-term forecast for the two nearest MET.hu stations (Balatonfüred, Balatonalmádi); the overlay can be hidden/refreshed from its header. |
+| **macOS** (`CsopakBeachCamMac`) | Menu-bar-only app (no Dock icon). Click the menu bar icon to drop down a small live preview; click anywhere inside the preview to detach it as a resizable window; click the menu bar icon again to re-attach. Right-click the icon for **Quit**. The detached window's position and size are remembered between sessions. Display sleep is suppressed via `IOPMAssertion` while the stream is playing. The HLS stream is played with `AVPlayerView` (no transport controls or hover dimming). The detached window also overlays live wind data and a short-term forecast for the two nearest MET.hu stations (Balatonfüred, Balatonalmádi); the overlay can be hidden/refreshed from its header. A map button in the same header swaps the video for MET.hu's AROME model forecast maps of Lake Balaton — today's frames laid out as a paged grid of thumbnails, steppable with the on-screen controls or the arrow keys. |
 | **watchOS** (`CsopakBeachCamWatch`) | Fetches periodic JPEG snapshots (about every 5 seconds) for a lightweight wrist experience. |
 
 Shared logic lives under `Shared/` (linked into all four app targets):
@@ -18,11 +18,14 @@ Shared logic lives under `Shared/` (linked into all four app targets):
 - `CameraConfig` — camera alias / player URL.
 - `StreamManager` — loads the IPCamLive player HTML, derives the stream state API URL, reads JSON, and produces HLS (`stream.m3u8`) and snapshot (`snapshot.jpg`) URLs.
 
-The weather overlay lives under `SharedWeather/` (linked into the macOS and tvOS targets only):
+The weather overlay lives under `SharedWeather/` (linked into the iOS, macOS, and tvOS targets):
 
-- `WeatherFetcher` / `WeatherViewModel` — pull the latest 10-minute observations (wind speed, gusts, direction, temperature) for each target station from the [MET.hu open data portal](https://odp.met.hu/) and an hourly wind forecast from [Open-Meteo](https://open-meteo.com/). Polls every ~90 s.
+- `WeatherFetcher` / `WeatherViewModel` — pull the latest 10-minute observations (wind speed, gusts, direction, temperature) for each target station from the [MET.hu open data portal](https://odp.met.hu/) and an hourly wind forecast from the [Windguru](https://www.windguru.cz/) Micro endpoint using the AROME-HU 2.5 km model. Polls every ~90 s; on transient failures the previous good values are kept so the overlay never flickers blank.
+- `WindguruCredentialsStore` / `WindguruSettingsView` — custom Windguru spots (e.g. Palóznaki Öböl) require a Windguru PRO account; credentials are entered in-app and stored in the platform Keychain.
 - `MiniZip` — minimal in-process ZIP extractor (single-entry, store/deflate) used to read the MET.hu observation archives without a third-party dependency.
-- `WeatherOverlayView` / `WeatherStyling` — Beaufort-coloured, monospaced grid rendered on top of the video. On tvOS the overlay stretches across the full top of the screen and is non-interactive (its refresh/hide buttons are gated to macOS).
+- `WeatherOverlayView` / `WeatherStyling` — Beaufort-coloured, monospaced grid rendered on top of the video, with a combined wind + gust bar graph and wind-direction arrows on forecast rows. Its map/refresh/hide buttons are gated to macOS; on iOS and tvOS the overlay is render-only.
+
+The Balaton forecast-map browser (`BalatonMapView`) is macOS-only and lives in `CsopakBeachCamMac/` — it scrapes the frame list from MET.hu's [Balaton model forecast page](https://met.hu/idojaras/tavaink/balaton/) and prefetches today's images.
 
 ## Requirements
 
@@ -38,6 +41,19 @@ The weather overlay lives under `SharedWeather/` (linked into the macOS and tvOS
 For the **macOS** scheme, pick **My Mac** as the destination. After launch the app has no window or Dock icon — look for the sailboat icon in the menu bar.
 
 Unit and UI test targets exist for iOS and tvOS.
+
+## Releases
+
+Pushing a tag that starts with `v` triggers the release workflow (`.github/workflows/release.yml`): it builds the macOS menu-bar app in Release configuration on a GitHub-hosted Mac runner, ad-hoc signs it, and publishes the zipped app bundle as a GitHub release with auto-generated notes. The tag (minus the `v`) is injected as the app's marketing version.
+
+To cut a release:
+
+```bash
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+Only the macOS app is attached to releases — the iOS, tvOS, and watchOS apps need Apple Developer signing to be installable and are built from source instead. The released app is ad-hoc signed but **not notarized**, so Gatekeeper quarantines the download: right-click the app and choose **Open** on first launch (or `xattr -d com.apple.quarantine CsopakBeachCamMac.app`).
 
 ## Pointing at another camera
 

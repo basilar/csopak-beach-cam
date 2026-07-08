@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Build macOS app
+        # -target instead of -scheme: the Mac scheme is not shared in the repo.
+        run: |
+          xcodebuild -project CsopakBeachCam.xcodeproj \
+            -target CsopakBeachCamMac \
+            -configuration Release \
+            SYMROOT="$PWD/ci-build" \
+            CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION="${GITHUB_REF_NAME#v}" \
+            build
+
+      - name: Ad-hoc sign
+        # Apple Silicon refuses to run fully unsigned binaries; an ad-hoc
+        # signature is the minimum that lets the app launch after download.
+        run: codesign --force --deep --sign - "ci-build/Release/CsopakBeachCamMac.app"
+
+      - name: Zip app bundle
+        run: ditto -c -k --keepParent "ci-build/Release/CsopakBeachCamMac.app" "CsopakBeachCam-macOS-${GITHUB_REF_NAME}.zip"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            "CsopakBeachCam-macOS-${GITHUB_REF_NAME}.zip"

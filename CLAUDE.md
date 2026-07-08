@@ -31,16 +31,24 @@ node get-m3u8-playlist-from-ipcamlive.js
 
 The macOS app is **menu-bar only** — `LSUIElement` is set, so when run there is no window or Dock icon. Look for the sailboat icon in the menu bar; right-click for Quit / Windguru Credentials.
 
+## Releasing
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`: it builds the macOS app with `-target CsopakBeachCamMac` (deliberately not `-scheme` — the Mac scheme isn't shared, and CI only sees shared schemes), ad-hoc signs it (`codesign -s -`; Apple Silicon won't launch fully unsigned binaries), zips it with `ditto`, and publishes a GitHub release via `gh` with auto-generated notes. The tag minus the `v` prefix is injected as `MARKETING_VERSION`. Only the macOS app is released; the app is not notarized. No third-party actions beyond `actions/checkout` — keep it that way.
+
+```bash
+git tag v1.1.0 && git push origin v1.1.0
+```
+
 ## Architecture
 
 ### Shared code is folder-linked, not a framework
 
-Two source folders are added as file references to multiple targets directly in the pbxproj — there is no shared library/target:
+Two source folders are attached to multiple targets as `fileSystemSynchronizedGroups` in the pbxproj — there is no shared library/target:
 
 - `Shared/` → linked into **all four** app targets.
-- `SharedWeather/` → linked into **macOS and tvOS only**.
+- `SharedWeather/` → linked into **iOS, macOS, and tvOS** (not watchOS).
 
-When adding files to either folder, they must be added to the relevant targets in Xcode or the build will fail with "Cannot find X in scope" on some platforms but not others. There is no `#if canImport(...)` guard pattern in use; targets are kept apart by membership instead.
+Because the folders are synchronized, a new file dropped into one of them is compiled by **every** target that syncs it — platform-specific code inside these folders must be fenced with `#if os(...)` (see `WeatherOverlayView.swift`, `WindguruSettingsView.swift`) or it will break the other platforms' builds.
 
 ### Stream resolution (`Shared/StreamManager.swift`)
 
@@ -57,7 +65,7 @@ IPCamLive does not expose a stable HLS URL — it has to be derived per session:
 
 Each platform plays the stream differently on purpose:
 
-- **iOS** (`WebView.swift`): embeds the IPCamLive player page in `WKWebView` (inline + pinch-to-zoom). Idle timer is disabled so the screen stays on.
+- **iOS** (`WebView.swift`): embeds the IPCamLive player page in `WKWebView` (inline + pinch-to-zoom). Idle timer is disabled so the screen stays on. In landscape, `ContentView` starts a `WeatherViewModel` and lays the (non-interactive) weather overlay over the video, plus a key button that sheets `WindguruSettingsView`; rotating back to portrait stops the polling.
 - **tvOS** (`VideoStreamView.swift`): native `AVPlayerViewController` with the transport bar / PiP buttons stripped. Weather overlay pinned at top, non-interactive, covers in-stream watermark.
 - **macOS** (`VideoStreamView.swift`): `AVPlayerView` with no controls or hover dimming. `DisplaySleepBlocker` uses `IOPMAssertion` to keep the display awake while playing.
 - **watchOS**: no video player — polls `snapshot.jpg` every ~5s and displays as a `UIImage`. Uses `StreamManager` only for the snapshot URL.
@@ -72,16 +80,20 @@ The Mac app has a hand-rolled three-state UI tied to one `NSStatusItem`:
 
 Right-click (or ctrl-click) on the menu bar item shows the context menu via a temporarily-assigned `NSMenu` that's cleared after `performClick`. The attached popover hosts `ContentView(showWeather: false)`; the detached window hosts `ContentView(showWeather: true)`. The same `StreamManager` instance is passed into both so the stream survives the popover↔window transition.
 
-### Weather overlay (`SharedWeather/`, macOS + tvOS)
+### Weather overlay (`SharedWeather/`, iOS + macOS + tvOS)
 
 Two-source feed, polled every ~90 s by `WeatherViewModel`:
 
 - **Observations**: MET.hu open data portal (`odp.met.hu`). Station metadata is read from CSVs to discover the latest station IDs for Balatonfüred and Balatonalmádi; observations come as zipped CSVs (`HABP_10M_<id>_now.zip` or `HABP_10MWIND_<id>_now.zip`), unpacked in-process by `MiniZip` (a minimal store/deflate ZIP reader — no third-party deps).
-- **Forecast**: Windguru Micro endpoint with the `aromehu` (AROME-HU 2.5 km) model. Parses the `<pre>` block — line shape is `"<weekday> <day>. <HH>h <wspd> <gust> ..."`. Custom Windguru spots (e.g. Palóznaki Öböl) need a **Windguru PRO** account, so credentials are stored in the macOS Keychain via `WindguruCredentialsStore` (service `windguru-pro`, username mirrored in `UserDefaults`).
+- **Forecast**: Windguru Micro endpoint with the `aromehu` (AROME-HU 2.5 km) model. Parses the `<pre>` block — line shape is `"<weekday> <day>. <HH>h <wspd> <gust> ..."`. Custom Windguru spots (e.g. Palóznaki Öböl) need a **Windguru PRO** account, so credentials are stored in the platform Keychain via `WindguruCredentialsStore` (service `windguru-pro`, username mirrored in `UserDefaults`); they're entered through `WindguruSettingsView` (macOS context menu, iOS key-button sheet).
 
 On refresh failure, the view model keeps the **previous good values** rather than blanking the UI — see `refresh()` in `WeatherViewModel.swift`. Preserve that behavior when changing this code; flickering on transient failures was an explicit thing to avoid (see commit `f187664`).
 
-The overlay's hide/refresh buttons are gated `#if os(macOS)` — on tvOS it's render-only.
+The overlay's map/hide/refresh buttons are gated `#if os(macOS)` — on iOS and tvOS it's render-only. Observations render as a combined wind + gust bar graph; forecast rows carry wind-direction arrows.
+
+### Balaton forecast maps (`CsopakBeachCamMac/BalatonMapView.swift`, macOS only)
+
+The map button in the overlay header toggles `ContentView` into map mode, replacing the video with AROME model forecast maps scraped from MET.hu's Balaton page (`met.hu/idojaras/tavaink/balaton/`). Frame filenames encode model run + lead time (`mwWB<run>_<HHMM>+<HHHMM>.jpg`); only frames valid today (Budapest time) are kept, and all images are prefetched. The overlay stays visible above the maps and highlights the selected frame's time.
 
 ## Conventions worth knowing
 

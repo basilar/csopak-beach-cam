@@ -141,16 +141,21 @@ final class BalatonMapViewModel: ObservableObject {
 struct BalatonMapView: View {
     @ObservedObject var viewModel: BalatonMapViewModel
 
+    private let pageSize = 6
+    private let gridColumns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 3)
+
     var body: some View {
         ZStack(alignment: .bottom) {
             Color.black
 
-            if let image = viewModel.currentImage {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if viewModel.isLoading || (!viewModel.frames.isEmpty && viewModel.currentImage == nil) {
+            if !viewModel.frames.isEmpty {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    mapGrid
+                    Spacer(minLength: 0)
+                }
+                .padding(.bottom, 36)
+            } else if viewModel.isLoading {
                 ProgressView("Loading map…")
                     .progressViewStyle(.circular)
                     .foregroundColor(.white)
@@ -185,6 +190,64 @@ struct BalatonMapView: View {
         .task { await viewModel.loadIfNeeded() }
     }
 
+    // Page of six frames containing the current selection; stepping the
+    // selection across a page boundary flips to the next/previous page.
+    private var mapGrid: some View {
+        let pageStart = (viewModel.index / pageSize) * pageSize
+        let pageEnd = min(pageStart + pageSize, viewModel.frames.count)
+        return LazyVGrid(columns: gridColumns, spacing: 4) {
+            ForEach(pageStart..<pageEnd, id: \.self) { i in
+                tile(for: i)
+            }
+        }
+        .padding(6)
+    }
+
+    @ViewBuilder
+    private func tile(for index: Int) -> some View {
+        let frame = viewModel.frames[index]
+        let isSelected = index == viewModel.index
+        Group {
+            if let image = viewModel.images[frame.url] {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                ZStack {
+                    Color.white.opacity(0.06)
+                    ProgressView()
+                        .controlSize(.small)
+                        .colorScheme(.dark)
+                }
+                .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            Text(Self.timeFormatter.string(from: frame.validTime))
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(isSelected ? .yellow : .white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.black.opacity(0.6))
+                .cornerRadius(4)
+                .padding(3)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 3)
+                .stroke(isSelected ? Color.yellow : Color.white.opacity(0.2),
+                        lineWidth: isSelected ? 2 : 1)
+        )
+        .opacity(isSelected ? 1 : 0.55)
+        .onTapGesture { viewModel.index = index }
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeZone = WeatherConstants.timeZone
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
     private var controls: some View {
         HStack(spacing: 12) {
             Button {
@@ -197,6 +260,7 @@ struct BalatonMapView: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
+            .keyboardShortcut(.leftArrow, modifiers: .command)
             .disabled(viewModel.index <= 0)
             .opacity(viewModel.index <= 0 ? 0.35 : 1)
 
@@ -210,6 +274,7 @@ struct BalatonMapView: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
+            .keyboardShortcut(.leftArrow, modifiers: [])
             .disabled(viewModel.index <= 0)
             .opacity(viewModel.index <= 0 ? 0.35 : 1)
 
@@ -231,6 +296,7 @@ struct BalatonMapView: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
+            .keyboardShortcut(.rightArrow, modifiers: [])
             .disabled(viewModel.index >= viewModel.frames.count - 1)
             .opacity(viewModel.index >= viewModel.frames.count - 1 ? 0.35 : 1)
         }
@@ -238,9 +304,6 @@ struct BalatonMapView: View {
 
     private var timeLabel: String {
         guard let frame = viewModel.currentFrame else { return "—" }
-        let f = DateFormatter()
-        f.timeZone = WeatherConstants.timeZone
-        f.dateFormat = "HH:mm"
-        return f.string(from: frame.validTime)
+        return Self.timeFormatter.string(from: frame.validTime)
     }
 }
