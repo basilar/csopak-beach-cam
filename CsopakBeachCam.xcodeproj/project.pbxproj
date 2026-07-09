@@ -78,11 +78,6 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
-		1B00000000000000000000AA /* SharedWeather */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = SharedWeather;
-			sourceTree = "<group>";
-		};
 		1B00000000000000000000A2 /* CsopakBeachCam */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = CsopakBeachCam;
@@ -130,6 +125,11 @@
 				1C00000000000000000000A3 /* Exceptions for "CsopakBeachCamMac" folder in "CsopakBeachCamMac" target */,
 			);
 			path = CsopakBeachCamMac;
+			sourceTree = "<group>";
+		};
+		1B00000000000000000000AA /* SharedWeather */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SharedWeather;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -243,8 +243,8 @@
 			);
 			fileSystemSynchronizedGroups = (
 				1B00000000000000000000A1 /* Shared */,
-				1B00000000000000000000AA /* SharedWeather */,
 				1B00000000000000000000A2 /* CsopakBeachCam */,
+				1B00000000000000000000AA /* SharedWeather */,
 			);
 			name = CsopakBeachCam;
 			packageProductDependencies = (
@@ -267,8 +267,8 @@
 			);
 			fileSystemSynchronizedGroups = (
 				1B00000000000000000000A1 /* Shared */,
-				1B00000000000000000000AA /* SharedWeather */,
 				1B00000000000000000000A3 /* CsopakBeachCamTV */,
+				1B00000000000000000000AA /* SharedWeather */,
 			);
 			name = CsopakBeachCamTV;
 			packageProductDependencies = (
@@ -406,8 +406,8 @@
 			);
 			fileSystemSynchronizedGroups = (
 				1B00000000000000000000A1 /* Shared */,
-				1B00000000000000000000AA /* SharedWeather */,
 				1B00000000000000000000A9 /* CsopakBeachCamMac */,
+				1B00000000000000000000AA /* SharedWeather */,
 			);
 			name = CsopakBeachCamMac;
 			packageProductDependencies = (

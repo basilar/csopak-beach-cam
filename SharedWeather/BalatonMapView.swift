@@ -1,5 +1,33 @@
+// Compiled on macOS and tvOS only — SharedWeather is also synced into the
+// iOS target, which doesn't show the maps.
+#if os(macOS) || os(tvOS)
 import SwiftUI
+#if os(macOS)
 import AppKit
+private typealias PlatformImage = NSImage
+#else
+import UIKit
+private typealias PlatformImage = UIImage
+#endif
+
+// tvOS renders at TV distance, so the fixed-size labels need to be larger.
+#if os(tvOS)
+private let timeLabelFontSize: CGFloat = 26
+private let tileLabelFontSize: CGFloat = 20
+#else
+private let timeLabelFontSize: CGFloat = 16
+private let tileLabelFontSize: CGFloat = 10
+#endif
+
+private extension Image {
+    init(platformImage: PlatformImage) {
+        #if os(macOS)
+        self.init(nsImage: platformImage)
+        #else
+        self.init(uiImage: platformImage)
+        #endif
+    }
+}
 
 /// Fetches the AROME map forecast images shown on
 /// https://met.hu/idojaras/tavaink/balaton/ ("Térképes modell előrejelzés").
@@ -16,7 +44,7 @@ final class BalatonMapViewModel: ObservableObject {
     }
 
     @Published private(set) var frames: [Frame] = []
-    @Published private(set) var images: [URL: NSImage] = [:]
+    @Published fileprivate private(set) var images: [URL: PlatformImage] = [:]
     @Published private(set) var isLoading = false
     @Published private(set) var error = ""
     @Published var index = 0
@@ -26,10 +54,6 @@ final class BalatonMapViewModel: ObservableObject {
 
     var currentFrame: Frame? {
         frames.indices.contains(index) ? frames[index] : nil
-    }
-
-    var currentImage: NSImage? {
-        currentFrame.flatMap { images[$0.url] }
     }
 
     func loadIfNeeded() async {
@@ -93,11 +117,11 @@ final class BalatonMapViewModel: ObservableObject {
     }
 
     private func prefetchImages(for frames: [Frame]) async {
-        await withTaskGroup(of: (URL, NSImage?).self) { group in
+        await withTaskGroup(of: (URL, PlatformImage?).self) { group in
             for frame in frames where images[frame.url] == nil {
                 group.addTask {
                     let image = (try? await URLSession.shared.data(from: frame.url))
-                        .flatMap { NSImage(data: $0.0) }
+                        .flatMap { PlatformImage(data: $0.0) }
                     return (frame.url, image)
                 }
             }
@@ -189,9 +213,11 @@ struct BalatonMapView: View {
                 VStack(spacing: 12) {
                     Text(viewModel.error)
                         .foregroundColor(.white)
+                    #if os(macOS)
                     Button("Retry") {
                         Task { await viewModel.load() }
                     }
+                    #endif
                 }
             }
 
@@ -203,7 +229,7 @@ struct BalatonMapView: View {
         .overlay(alignment: .bottomLeading) {
             if !viewModel.frames.isEmpty {
                 Text(timeLabel)
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .font(.system(size: timeLabelFontSize, weight: .bold, design: .monospaced))
                     .foregroundColor(.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -240,14 +266,13 @@ struct BalatonMapView: View {
         let isSelected = index == viewModel.index
         Group {
             if let image = viewModel.images[frame.url] {
-                Image(nsImage: image)
+                Image(platformImage: image)
                     .resizable()
                     .scaledToFit()
             } else {
                 ZStack {
                     Color.white.opacity(0.06)
                     ProgressView()
-                        .controlSize(.small)
                         .colorScheme(.dark)
                 }
                 .aspectRatio(4.0 / 3.0, contentMode: .fit)
@@ -256,7 +281,7 @@ struct BalatonMapView: View {
         .frame(height: height)
         .overlay(alignment: .bottomTrailing) {
             Text(Self.timeFormatter.string(from: frame.validTime))
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .font(.system(size: tileLabelFontSize, weight: .bold, design: .monospaced))
                 .foregroundColor(isSelected ? .yellow : .white)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
@@ -270,7 +295,9 @@ struct BalatonMapView: View {
                         lineWidth: isSelected ? 2 : 1)
         )
         .opacity(isSelected ? 1 : 0.55)
+        #if os(macOS)
         .onTapGesture { viewModel.index = index }
+        #endif
     }
 
     private static let timeFormatter: DateFormatter = {
@@ -280,8 +307,12 @@ struct BalatonMapView: View {
         return f
     }()
 
+    // On macOS the frames are stepped with clickable buttons (plus ⌘←/←/→
+    // shortcuts); on tvOS stepping is driven by the remote via onMoveCommand
+    // in ContentView, so only the position indicator is shown.
     private var controls: some View {
         HStack(spacing: 12) {
+            #if os(macOS)
             Button {
                 viewModel.goToFirst()
             } label: {
@@ -309,15 +340,17 @@ struct BalatonMapView: View {
             .keyboardShortcut(.leftArrow, modifiers: [])
             .disabled(viewModel.index <= 0)
             .opacity(viewModel.index <= 0 ? 0.35 : 1)
+            #endif
 
             Text("\(viewModel.index + 1)/\(viewModel.frames.count)")
-                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                .font(.system(size: tileLabelFontSize + 1, weight: .regular, design: .monospaced))
                 .foregroundColor(.white.opacity(0.8))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
                 .background(Color.black.opacity(0.5))
                 .cornerRadius(8)
 
+            #if os(macOS)
             Button {
                 viewModel.stepForward()
             } label: {
@@ -331,6 +364,7 @@ struct BalatonMapView: View {
             .keyboardShortcut(.rightArrow, modifiers: [])
             .disabled(viewModel.index >= viewModel.frames.count - 1)
             .opacity(viewModel.index >= viewModel.frames.count - 1 ? 0.35 : 1)
+            #endif
         }
     }
 
@@ -339,3 +373,4 @@ struct BalatonMapView: View {
         return Self.timeFormatter.string(from: frame.validTime)
     }
 }
+#endif

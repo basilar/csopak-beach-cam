@@ -30,7 +30,10 @@ struct WeatherOverlayView: View {
                     .lineLimit(2)
             }
 
-            HStack(alignment: .top, spacing: 16) {
+            // The observation column sets the row height; the forecast blocks
+            // stretch to fill it (header level with the station names, hour
+            // row level with the observations' last row).
+            HStack(alignment: .bottom, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(WeatherConstants.targetNames, id: \.self) { name in
                         StationObsBlock(series: seriesFor(name: name),
@@ -347,10 +350,28 @@ private struct ForecastBlock: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(headerLabel)
-                .font(monoFont())
-                .foregroundColor(.white)
+        // The block fills the height the observation column gives the row.
+        // Everything but the chart is fixed-height rows (header, G ×, Dir,
+        // hours) plus 1pt spacings, so the chart cell height is whatever is
+        // left, divided over the chart rows — the bars scale with the space.
+        GeometryReader { geo in
+            let chartCellH = max(cellH, (geo.size.height - 5 * cellH - 5) / CGFloat(chartRows))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(headerLabel)
+                    .font(monoFont())
+                    .foregroundColor(.white)
+                    .frame(height: cellH, alignment: .leading)
+                // Blank row mirroring the observations' minute-label row, so
+                // the chart top lines up with the first measurement row.
+                Color.clear
+                    .frame(height: cellH)
+                content(chartCellH: chartCellH)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func content(chartCellH: CGFloat) -> some View {
             if let fc, !fc.error.isEmpty {
                 Text(fc.error)
                     .font(monoFont(weight: .regular))
@@ -373,11 +394,12 @@ private struct ForecastBlock: View {
                 let pastCount = pastHourCount(dates: dates)
 
                 HStack(alignment: .top, spacing: 0) {
-                    labelColumn()
+                    labelColumn(chartCellH: chartCellH)
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
                             VStack(alignment: .leading, spacing: 1) {
-                                combinedRow(winds: winds, gusts: gusts, vmax: vmax)
+                                combinedRow(winds: winds, gusts: gusts, vmax: vmax,
+                                            cellHeight: chartCellH)
                                 gustinessRow(winds: winds, gusts: gusts)
                                 dirRow(dirs: dirs, count: hours.count)
                                 hourRow(hours: hours)
@@ -434,10 +456,9 @@ private struct ForecastBlock: View {
                     }
                 }
             }
-        }
     }
 
-    private func labelColumn() -> some View {
+    private func labelColumn(chartCellH: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Gust")
@@ -447,7 +468,7 @@ private struct ForecastBlock: View {
                     .font(monoFont())
                     .foregroundColor(.white)
             }
-            .frame(width: labelColumnWidth, height: CGFloat(chartRows) * cellH, alignment: .topLeading)
+            .frame(width: labelColumnWidth, height: CGFloat(chartRows) * chartCellH, alignment: .topLeading)
             Text("G ×")
                 .font(monoFont())
                 .foregroundColor(.white)
@@ -479,13 +500,15 @@ private struct ForecastBlock: View {
     }
 
     @ViewBuilder
-    private func combinedRow(winds: [Double], gusts: [Double], vmax: Double) -> some View {
+    private func combinedRow(winds: [Double], gusts: [Double], vmax: Double,
+                             cellHeight: CGFloat) -> some View {
         HStack(spacing: 0) {
             ForEach(winds.indices, id: \.self) { i in
                 CombinedBarColumn(wind: winds[i],
                                   gust: i < gusts.count ? gusts[i] : winds[i],
                                   vmax: vmax,
-                                  height: chartRows)
+                                  height: chartRows,
+                                  cellHeight: cellHeight)
                     .id("col-\(i)")
             }
         }
@@ -575,6 +598,7 @@ private struct CombinedBarColumn: View {
     let gust: Double
     let vmax: Double
     let height: Int
+    var cellHeight: CGFloat = cellH
 
     var body: some View {
         let windStyle = beaufortStyleKn(wind)
@@ -591,26 +615,26 @@ private struct CombinedBarColumn: View {
         VStack(spacing: 0) {
             ForEach(0..<height, id: \.self) { r in
                 if r < gustTop {
-                    Color.clear.frame(width: timeColW, height: cellH)
+                    Color.clear.frame(width: timeColW, height: cellHeight)
                 } else if r == gustTop && gustRows > windRows {
                     Text("\(Int(round(gust)))")
                         .font(monoFont())
                         .foregroundColor(gustStyle.fg)
-                        .frame(width: timeColW, height: cellH)
+                        .frame(width: timeColW, height: cellHeight)
                         .background(gustStyle.bg)
                 } else if r < windTop {
                     Color.clear
-                        .frame(width: timeColW, height: cellH)
+                        .frame(width: timeColW, height: cellHeight)
                         .background(gustStyle.bg)
                 } else if r == windTop {
                     Text("\(Int(round(wind)))")
                         .font(monoFont())
                         .foregroundColor(Color(rgbHex: 0x1d1d1d))
-                        .frame(width: timeColW, height: cellH)
+                        .frame(width: timeColW, height: cellHeight)
                         .background(lightBand(windStyle))
                 } else {
                     Color.clear
-                        .frame(width: timeColW, height: cellH)
+                        .frame(width: timeColW, height: cellHeight)
                         .background(lightBand(windStyle))
                 }
             }
