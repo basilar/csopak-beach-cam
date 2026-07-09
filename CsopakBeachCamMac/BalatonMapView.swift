@@ -175,10 +175,9 @@ struct BalatonMapView: View {
             Color.black
 
             if !viewModel.frames.isEmpty {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    mapGrid
-                    Spacer(minLength: 0)
+                GeometryReader { geo in
+                    mapGrid(fitting: geo.size)
+                        .frame(width: geo.size.width, height: geo.size.height)
                 }
                 .padding(.bottom, 36)
             } else if viewModel.isLoading {
@@ -213,24 +212,30 @@ struct BalatonMapView: View {
                     .padding(10)
             }
         }
+        .clipped()
         .task { await viewModel.loadIfNeeded() }
     }
 
     // Page of six frames containing the current selection; stepping the
     // selection across a page boundary flips to the next/previous page.
-    private var mapGrid: some View {
+    // Tiles are sized from the available space (never from the images'
+    // intrinsic size) so the grid can't grow past its slot and cover the
+    // weather bar above it.
+    private func mapGrid(fitting size: CGSize) -> some View {
         let pageStart = (viewModel.index / pageSize) * pageSize
         let pageEnd = min(pageStart + pageSize, viewModel.frames.count)
+        let rows = CGFloat((pageSize + gridColumns.count - 1) / gridColumns.count)
+        let tileHeight = max(0, (size.height - 12 - 4 * (rows - 1)) / rows)
         return LazyVGrid(columns: gridColumns, spacing: 4) {
             ForEach(pageStart..<pageEnd, id: \.self) { i in
-                tile(for: i)
+                tile(for: i, height: tileHeight)
             }
         }
         .padding(6)
     }
 
     @ViewBuilder
-    private func tile(for index: Int) -> some View {
+    private func tile(for index: Int, height: CGFloat) -> some View {
         let frame = viewModel.frames[index]
         let isSelected = index == viewModel.index
         Group {
@@ -248,6 +253,7 @@ struct BalatonMapView: View {
                 .aspectRatio(4.0 / 3.0, contentMode: .fit)
             }
         }
+        .frame(height: height)
         .overlay(alignment: .bottomTrailing) {
             Text(Self.timeFormatter.string(from: frame.validTime))
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
