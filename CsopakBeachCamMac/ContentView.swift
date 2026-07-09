@@ -53,6 +53,7 @@ struct ContentView: View {
                     sleepBlocker.stop()
                     weather.stop()
                 }
+                .background(viewSwitchKeyHandlers)
             } else {
                 VStack(spacing: 16) {
                     Text("Failed to load stream")
@@ -70,6 +71,23 @@ struct ContentView: View {
             if streamManager.streamURL == nil {
                 await streamManager.fetchStreamURL()
             }
+        }
+    }
+
+    // Hidden buttons so ↑ shows the camera and ↓ the forecast maps, matching
+    // the keyboardShortcut approach the map controls use for ←/→.
+    @ViewBuilder
+    private var viewSwitchKeyHandlers: some View {
+        if showWeather {
+            VStack {
+                Button("") { isMapMode = false }
+                    .keyboardShortcut(.upArrow, modifiers: [])
+                Button("") { isMapMode = true }
+                    .keyboardShortcut(.downArrow, modifiers: [])
+            }
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
         }
     }
 
